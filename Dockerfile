@@ -58,10 +58,12 @@ COPY --chown=node:node scripts/healthcheck.sh /opt/wvb-bootstrap/healthcheck.sh
 RUN chmod +x /opt/wvb-bootstrap/entrypoint.sh /opt/wvb-bootstrap/healthcheck.sh
 
 # -----------------------------------------------------------------------------
-# Wiki 디렉토리 (Railway가 시작 시 submodule init/fetch — 이미지에는 포함 안 함)
+# Wiki 디렉토리 처리: entrypoint.sh runtime에서 git clone으로 자동 생성
+# 빌드 시점 mkdir/chown 시도 → 실패 (Hermes 이미지가 /opt/data를 VOLUME 선언).
 # 보안: wiki 콘텐츠를 이미지에 굽지 않음 (이미지 layer cache 외부 노출 차단)
+# 2026-05-15 cto-lead 실수 fix: 빌드 [9/10] exit code 1 → 빌드 단계 제거.
 # -----------------------------------------------------------------------------
-RUN mkdir -p /opt/data/wiki && chown -R node:node /opt/data/wiki
+# (의도적으로 빈 단계 — wiki 처리는 entrypoint.sh §Step 2에서 수행)
 
 # -----------------------------------------------------------------------------
 # Healthcheck (Railway가 /health 엔드포인트 polling — 공식 gateway 제공)
