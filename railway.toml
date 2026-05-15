@@ -23,8 +23,11 @@ restartPolicyMaxRetries = 5
 # startCommand = REMOVED  (uncomment only if Dockerfile ENTRYPOINT 우회 의도)
 
 # Healthcheck (Hermes gateway가 /health 제공)
-healthcheckPath = "/health"
-healthcheckTimeout = 30
+# 2026-05-16 임시 비활성: Railway healthcheck fail 진단 중 (Network process)
+# 컨테이너 living 유지 → 텔레그램 봇 direct 호출로 작동 검증
+# hermes 시작 시간이 60초 초과 + API_SERVER bind timing 정확화 필요
+# healthcheckPath = "/health"
+# healthcheckTimeout = 30
 
 # 슬립 정책: 24/7 비서실장이라 절대 sleepable=false
 sleepApplication = false
