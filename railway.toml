@@ -9,7 +9,7 @@
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 # build 인자: HERMES_VERSION (Hermes 업그레이드 시 이것만 변경)
-buildCommand = "echo 'Using nousresearch/hermes-agent:v0.13.0 as base'"
+buildCommand = "echo 'Using nousresearch/hermes-agent:main as base'"
 
 [deploy]
 # Telegram polling 워크로드 → 항상 1개 인스턴스
@@ -17,8 +17,10 @@ numReplicas = 1
 # 재시작 정책: 실패 시 최대 5회 재시도 (메모리 OOM 등)
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
-# 시작 명령은 Dockerfile CMD 사용 (gateway run)
-startCommand = "gateway run"
+# 시작 명령: Dockerfile ENTRYPOINT 사용 (entrypoint.sh → exec hermes gateway run)
+# 2026-05-15 cto-lead 4번째 실수 fix: startCommand="gateway run" 은 ENTRYPOINT 우회하여
+# "gateway" 단독 실행 → PATH not found. startCommand 제거하여 Dockerfile ENTRYPOINT 사용.
+# startCommand = REMOVED  (uncomment only if Dockerfile ENTRYPOINT 우회 의도)
 
 # Healthcheck (Hermes gateway가 /health 제공)
 healthcheckPath = "/health"

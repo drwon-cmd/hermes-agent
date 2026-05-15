@@ -23,10 +23,9 @@ memory/SOUL/
 **/ACCESS_POLICY.md
 **/HEARTBEAT.md
 
-# Git 메타 (Dockerfile에서 submodule init은 별도 수행)
+# Git 메타 (entrypoint.sh가 환경변수로 wiki repo 처리, submodule 미사용)
 .git/
 .gitignore
-.gitmodules
 .github/
 
 # 개발/빌드 산출물

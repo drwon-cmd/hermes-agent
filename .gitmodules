@@ -1,8 +1,0 @@
-[submodule "wvb-ai"]
-	path = wvb-ai
-	url = https://github.com/drwon-cmd/wvb-ai.git
-	branch = master
-	shallow = true
-	update = none
-	# update = none: 자동 update 차단 (cron이 6시간마다 명시적 fetch)
-	# 빌드 시 .dockerignore에 의해 _personal/SOUL 차단
