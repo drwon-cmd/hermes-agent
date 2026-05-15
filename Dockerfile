@@ -1,6 +1,6 @@
 # =============================================================================
 # Hermes Agent — WVB 24/7 비서실장 (Railway 배포용)
-# Base: nousresearch/hermes-agent:v0.13.0 공식 이미지 위에 WVB layer 추가
+# Base: nousresearch/hermes-agent:main 공식 이미지 위에 WVB layer 추가
 # =============================================================================
 #
 # 설계 결정 (Design §2 → 공식 검증 반영):
@@ -10,10 +10,15 @@
 #  - Wiki submodule은 빌드 시 fetch (read-only), cron으로 6시간마다 갱신
 #  - Railway는 비루트 실행 강제 안 함 (공식 이미지는 node user 사용)
 #
-# 검증 상태: 공식 install docs + Dockerfile + docker.md 3개 교차 확인 (2026-05-15)
+# Base image tag 이력:
+#  2026-05-15: v0.13.0 → main 변경. v0.13.0은 GitHub release tag일 뿐 Docker Hub
+#  publish 없음. cto-lead 산출 실수 (Plan/Design Q2 결정과 충돌).
+#  Phase 1 안정 7-14일 후 최신 sha- 태그로 pin 전환 예정 (Task #12).
+#
+# 검증 상태: Docker Hub tag 페이지 + 공식 docker docs 재확인 (2026-05-15)
 # =============================================================================
 
-ARG HERMES_VERSION=v0.13.0
+ARG HERMES_VERSION=main
 FROM nousresearch/hermes-agent:${HERMES_VERSION}
 
 # -----------------------------------------------------------------------------
