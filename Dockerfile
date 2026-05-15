@@ -27,9 +27,11 @@ FROM nousresearch/hermes-agent:${HERMES_VERSION}
 USER root
 
 # 한국어 locale (한글 응답 안정성 - UTF-8 인코딩 보장)
+# 2026-05-16 추가: gettext-base (envsubst 명령 — cto-lead 6번째 실수 fix)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     tzdata \
+    gettext-base \
     && rm -rf /var/lib/apt/lists/* \
     && echo "ko_KR.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen \

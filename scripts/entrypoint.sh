@@ -20,8 +20,18 @@ log() {
 # -----------------------------------------------------------------------------
 # Step 1: config.yaml bootstrap (template → 환경변수 치환 → /opt/data)
 # -----------------------------------------------------------------------------
-if [ ! -f "${CONFIG_FILE}" ]; then
-    log "config.yaml not found, bootstrapping from template"
+# 2026-05-16 fix (cto-lead 6번째·D2 main review): 빈 파일 처리 + envsubst 검증
+# - L23 -f 만 체크 → -s (size > 0) 도 체크 (envsubst 실패 시 빈 파일이 남는 사고 방지)
+# - envsubst 명령어 존재 확인 (gettext-base 없으면 fail-fast)
+# - envsubst 결과 검증 (빈 파일이면 재시도 또는 fail)
+if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ]; then
+    log "config.yaml not found or empty, bootstrapping from template"
+
+    # envsubst 명령 존재 확인 (Dockerfile gettext-base 누락 시 명확한 에러)
+    if ! command -v envsubst >/dev/null 2>&1; then
+        log "FATAL: envsubst command not found. Install gettext-base in Dockerfile."
+        exit 1
+    fi
 
     # 필수 환경변수 검증 (없으면 fail-fast)
     : "${GROQ_API_KEY:?GROQ_API_KEY required}"
@@ -30,11 +40,17 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     : "${TELEGRAM_AUTHORIZED_USER_ID:?TELEGRAM_AUTHORIZED_USER_ID required}"
     : "${TELEGRAM_ADMIN_CHAT_ID:?TELEGRAM_ADMIN_CHAT_ID required}"
 
-    # envsubst로 ${VAR} 치환
-    envsubst < "${TEMPLATE_FILE}" > "${CONFIG_FILE}"
-    log "config.yaml written: ${CONFIG_FILE}"
+    # envsubst로 ${VAR} 치환 + 결과 검증
+    envsubst < "${TEMPLATE_FILE}" > "${CONFIG_FILE}.tmp"
+    if [ ! -s "${CONFIG_FILE}.tmp" ]; then
+        log "FATAL: envsubst produced empty output"
+        rm -f "${CONFIG_FILE}.tmp"
+        exit 1
+    fi
+    mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
+    log "config.yaml written: ${CONFIG_FILE} ($(wc -l < "${CONFIG_FILE}") lines)"
 else
-    log "config.yaml exists, skipping bootstrap"
+    log "config.yaml exists ($(wc -l < "${CONFIG_FILE}") lines), skipping bootstrap"
 fi
 
 # -----------------------------------------------------------------------------
@@ -52,23 +68,32 @@ fi
 # -----------------------------------------------------------------------------
 # Step 3: Wiki submodule 초기화 (없으면)
 # -----------------------------------------------------------------------------
+# 2026-05-16 fix (cto-lead 8번째·D3 main review): wiki clone 실패 시 set -e trigger 방지
+# - git clone 실패 시 WIKI_DIR 미생성
+# - 그 후 find 명령이 WIKI_DIR 없음으로 set -e trigger → entrypoint 죽임 → restart loop
+# - 해결: find 호출 전 디렉토리 존재 확인 + || true (이중 안전망)
 if [ ! -d "${WIKI_DIR}/.git" ] && [ -n "${WIKI_REPO_URL:-}" ]; then
     log "Cloning wiki repo (shallow, read-only): ${WIKI_REPO_URL}"
-    git clone --depth 1 "${WIKI_REPO_URL}" "${WIKI_DIR}" || \
+    git clone --depth 1 "${WIKI_REPO_URL}" "${WIKI_DIR}" 2>&1 || \
         log "WARNING: wiki clone failed (continuing without wiki)"
 
-    # _personal, SOUL 강제 제외 (Personal Data Protection)
-    if [ -d "${WIKI_DIR}/_personal" ]; then
-        log "SECURITY: removing wiki/_personal/ (CCO block)"
-        rm -rf "${WIKI_DIR}/_personal"
+    # WIKI_DIR 디렉토리가 실제로 생성됐는지 확인 후 personal data 제거
+    if [ -d "${WIKI_DIR}" ]; then
+        # _personal, SOUL 강제 제외 (Personal Data Protection)
+        if [ -d "${WIKI_DIR}/_personal" ]; then
+            log "SECURITY: removing wiki/_personal/ (CCO block)"
+            rm -rf "${WIKI_DIR}/_personal" || true
+        fi
+        # find로 SOUL.md, USER.md, ACCESS_POLICY.md, HEARTBEAT.md 제거
+        find "${WIKI_DIR}" -type f \( \
+            -name "SOUL.md" -o \
+            -name "USER.md" -o \
+            -name "ACCESS_POLICY.md" -o \
+            -name "HEARTBEAT.md" \
+            \) -exec rm -f {} \; 2>/dev/null || true
+    else
+        log "WARNING: wiki clone did not produce ${WIKI_DIR}, skipping personal data scrub"
     fi
-    # find로 SOUL.md, USER.md, ACCESS_POLICY.md, HEARTBEAT.md 제거
-    find "${WIKI_DIR}" -type f \( \
-        -name "SOUL.md" -o \
-        -name "USER.md" -o \
-        -name "ACCESS_POLICY.md" -o \
-        -name "HEARTBEAT.md" \
-        \) -exec rm -f {} \;
 fi
 
 # -----------------------------------------------------------------------------
