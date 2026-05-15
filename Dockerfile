@@ -50,10 +50,10 @@ ENV LANG=ko_KR.UTF-8 \
 WORKDIR /opt/wvb-bootstrap
 
 # Skill 디렉토리 (WVB 도메인 룰 미러링)
-COPY --chown=node:node config.yaml.template /opt/wvb-bootstrap/config.yaml.template
-COPY --chown=node:node skills/ /opt/wvb-bootstrap/skills/
-COPY --chown=node:node scripts/entrypoint.sh /opt/wvb-bootstrap/entrypoint.sh
-COPY --chown=node:node scripts/healthcheck.sh /opt/wvb-bootstrap/healthcheck.sh
+COPY --chown=hermes:hermes config.yaml.template /opt/wvb-bootstrap/config.yaml.template
+COPY --chown=hermes:hermes skills/ /opt/wvb-bootstrap/skills/
+COPY --chown=hermes:hermes scripts/entrypoint.sh /opt/wvb-bootstrap/entrypoint.sh
+COPY --chown=hermes:hermes scripts/healthcheck.sh /opt/wvb-bootstrap/healthcheck.sh
 
 RUN chmod +x /opt/wvb-bootstrap/entrypoint.sh /opt/wvb-bootstrap/healthcheck.sh
 
@@ -71,7 +71,9 @@ RUN chmod +x /opt/wvb-bootstrap/entrypoint.sh /opt/wvb-bootstrap/healthcheck.sh
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD /opt/wvb-bootstrap/healthcheck.sh || exit 1
 
-USER node
+# 공식 base image 검증 (2026-05-15): hermes user UID 10000 사전 생성 (Hermes 공식 Dockerfile L28)
+# cto-lead 3번째 실수 fix: 'node' 가정 → 실제 'hermes' (https://raw.githubusercontent.com/NousResearch/hermes-agent/main/Dockerfile L104)
+USER hermes
 
 # -----------------------------------------------------------------------------
 # Gateway run + Telegram polling
