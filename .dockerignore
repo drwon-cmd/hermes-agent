@@ -1,31 +1,82 @@
-# Git
-.git
+# =============================================================================
+# .dockerignore — 시크릿/누수 차단
+# =============================================================================
+
+# 시크릿 (절대 이미지에 포함 금지)
+.env
+.env.*
+*.env
+.env.local
+.env.production
+secrets/
+credentials/
+*.pem
+*.key
+*.crt
+.git-credentials
+
+# WVB Personal Data Protection (CLAUDE.md - personal-data-protection.md)
+wiki/_personal/
+memory/SOUL/
+**/USER.md
+**/SOUL.md
+**/ACCESS_POLICY.md
+**/HEARTBEAT.md
+
+# Git 메타 (Dockerfile에서 submodule init은 별도 수행)
+.git/
 .gitignore
 .gitmodules
+.github/
 
-# Dependencies
-node_modules
-**/node_modules
-.venv
-**/.venv
+# 개발/빌드 산출물
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+build/
+*.egg
 
-# Built artifacts that are regenerated inside the image.  Excluded so local
-# rebuilds on the developer's machine don't invalidate the npm-install layer
-# that now depends on the full ui-tui/packages/hermes-ink/ tree being present.
-ui-tui/dist/
-ui-tui/packages/hermes-ink/dist/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 
-# CI/CD
-.github
+# 로컬 테스트
+test-data/
+tmp/
+*.log
+*.local
 
-# Environment files
-.env
-
+# 문서 (Railway 런타임 불필요)
+docs/
 *.md
+!README.md
+LICENSE
+CHANGELOG.md
 
-# Runtime data (bind-mounted at /opt/data; must not leak into build context)
-data/
+# Hermes 로컬 세션 (개인 PC 테스트 흔적)
+.hermes/
+~/.hermes/
 
-# Compose/profile runtime state (bind-mounted; avoid ownership/secret issues)
-hermes-config/
-runtime/
+# WVB 본 repo의 nested CC artifacts
+.claude/
+.bkit/
+notifications/
+content/
+knowledge/
+output/

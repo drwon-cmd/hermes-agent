@@ -1,117 +1,77 @@
-FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie@sha256:b3c543b6c4f23a5f2df22866bd7857e5d304b67a564f4feab6ac22044dde719b AS uv_source
-FROM tianon/gosu:1.19-trixie@sha256:3b176695959c71e123eb390d427efc665eeb561b1540e82679c15e992006b8b9 AS gosu_source
-FROM debian:13.4
-
-# Disable Python stdout buffering to ensure logs are printed immediately
-ENV PYTHONUNBUFFERED=1
-
-# Store Playwright browsers outside the volume mount so the build-time
-# install survives the /opt/data volume overlay at runtime.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
-
-# Install system dependencies in one layer, clear APT cache
-# tini reaps orphaned zombie processes (MCP stdio subprocesses, git, bun, etc.)
-# that would otherwise accumulate when hermes runs as PID 1. See #15012.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential curl nodejs npm python3 ripgrep ffmpeg gcc python3-dev libffi-dev procps git openssh-client docker-cli tini && \
-    rm -rf /var/lib/apt/lists/*
-
-# Non-root user for runtime; UID can be overridden via HERMES_UID at runtime
-RUN useradd -u 10000 -m -d /opt/data hermes
-
-COPY --chmod=0755 --from=gosu_source /gosu /usr/local/bin/
-COPY --chmod=0755 --from=uv_source /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
-
-WORKDIR /opt/hermes
-
-# ---------- Layer-cached dependency install ----------
-# Copy only package manifests first so npm install + Playwright are cached
-# unless the lockfiles themselves change.
+# =============================================================================
+# Hermes Agent — WVB 24/7 비서실장 (Railway 배포용)
+# Base: nousresearch/hermes-agent:v0.13.0 공식 이미지 위에 WVB layer 추가
+# =============================================================================
 #
-# ui-tui/packages/hermes-ink/ is copied IN FULL (not just its manifests)
-# because it is referenced as a `file:` workspace dependency from
-# ui-tui/package.json.  Copying the tree up front lets npm resolve the
-# workspace to real content instead of stopping at a bare package.json.
-COPY package.json package-lock.json ./
-COPY web/package.json web/package-lock.json web/
-COPY ui-tui/package.json ui-tui/package-lock.json ui-tui/
-COPY ui-tui/packages/hermes-ink/ ui-tui/packages/hermes-ink/
-
-# `npm_config_install_links=false` forces npm to install `file:` deps as
-# symlinks (the npm 10+ default) even on Debian's older bundled npm 9.x,
-# which defaults to `install-links=true` and installs file deps as *copies*.
-# The host-side package-lock.json is generated with a newer npm that uses
-# symlinks, so an install-as-copy produces a hidden node_modules/.package-lock.json
-# that permanently disagrees with the root lock on the @hermes/ink entry.
-# That disagreement trips the TUI launcher's `_tui_need_npm_install()`
-# check on every startup and triggers a runtime `npm install` that then
-# fails with EACCES (node_modules/ is root-owned from build time).
-ENV npm_config_install_links=false
-
-RUN npm install --prefer-offline --no-audit && \
-    npx playwright install --with-deps chromium --only-shell && \
-    (cd web && npm install --prefer-offline --no-audit) && \
-    (cd ui-tui && npm install --prefer-offline --no-audit) && \
-    npm cache clean --force
-
-# ---------- Layer-cached Python dependency install ----------
-# Copy only pyproject.toml + uv.lock so the Python dep resolve + wheel
-# download + native-extension compile layer is cached unless those inputs
-# change.  Before this split the Python install sat after `COPY . .`, so
-# every source-only commit re-did ~4-5 min of dep work on cold builds.
+# 설계 결정 (Design §2 → 공식 검증 반영):
+#  - 공식 이미지를 base로 사용 (직접 multi-stage build 회피 → 빌드 시간 단축)
+#  - debian:13.4 + Python 3.13 + uv + tini + ffmpeg + ripgrep + Node 22 기본 포함
+#  - Gateway 모드 `gateway run` 사용 (port 8642 healthcheck endpoint 제공)
+#  - Wiki submodule은 빌드 시 fetch (read-only), cron으로 6시간마다 갱신
+#  - Railway는 비루트 실행 강제 안 함 (공식 이미지는 node user 사용)
 #
-# README.md is referenced by pyproject.toml's `readme =` field, but it's
-# excluded from the build context by .dockerignore's `*.md`.  uv's build
-# frontend stats the readme path during dep resolution, so we `touch` an
-# empty placeholder — the real README is restored by `COPY . .` below.
-#
-# `uv sync --frozen --no-install-project --extra all` installs only the
-# deps reachable through the composite `[all]` extra (handpicked set
-# intended for the production image).  We do NOT use `--all-extras`:
-# that would pull in `[rl]` (atroposlib + tinker + torch + wandb from
-# git), `[yc-bench]` (another git dep), and `[termux-all]` (Android
-# redundancy), none of which belong in the published container.
-#
-# The editable link is created after the source copy below.
-COPY pyproject.toml uv.lock ./
-RUN touch ./README.md
-RUN uv sync --frozen --no-install-project --extra all
+# 검증 상태: 공식 install docs + Dockerfile + docker.md 3개 교차 확인 (2026-05-15)
+# =============================================================================
 
-# ---------- Source code ----------
-# .dockerignore excludes node_modules, so the installs above survive.
-COPY --chown=hermes:hermes . .
+ARG HERMES_VERSION=v0.13.0
+FROM nousresearch/hermes-agent:${HERMES_VERSION}
 
-# Build browser dashboard and terminal UI assets.
-RUN cd web && npm run build && \
-    cd ../ui-tui && npm run build
-
-# ---------- Permissions ----------
-# Make install dir world-readable so any HERMES_UID can read it at runtime.
-# The venv needs to be traversable too.
-# node_modules trees additionally need to be writable by the hermes user
-# so the runtime `npm install` triggered by _tui_need_npm_install() in
-# hermes_cli/main.py succeeds (see #18800). /opt/hermes/web is build-time
-# only (HERMES_WEB_DIST points at hermes_cli/web_dist) and is intentionally
-# not chowned here.
-# The .venv MUST be hermes-writable so lazy_deps.py can install platform
-# packages (discord.py, telegram, slack, etc.) at first gateway boot.
-# Without this, `uv pip install` fails with EACCES and all messaging
-# adapters silently fail to load.  See tools/lazy_deps.py.
+# -----------------------------------------------------------------------------
+# WVB 추가 시스템 패키지 (공식 이미지가 git/ripgrep/ffmpeg 이미 포함, 보강용)
+# -----------------------------------------------------------------------------
 USER root
-RUN chmod -R a+rX /opt/hermes && \
-    chown -R hermes:hermes /opt/hermes/.venv /opt/hermes/ui-tui /opt/hermes/node_modules
-# Start as root so the entrypoint can usermod/groupmod + gosu.
-# If HERMES_UID is unset, the entrypoint drops to the default hermes user (10000).
 
-# ---------- Link hermes-agent itself (editable) ----------
-# Deps are already installed in the cached layer above; `--no-deps` makes
-# this a fast (~1s) egg-link creation with no resolution or downloads.
-RUN uv pip install --no-cache-dir --no-deps -e "."
+# 한국어 locale (한글 응답 안정성 - UTF-8 인코딩 보장)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    locales \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "ko_KR.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen \
+    && ln -sf /usr/share/zoneinfo/Asia/Singapore /etc/localtime
 
-# ---------- Runtime ----------
-ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
-ENV HERMES_HOME=/opt/data
-ENV PATH="/opt/data/.local/bin:${PATH}"
-VOLUME [ "/opt/data" ]
-ENTRYPOINT [ "/usr/bin/tini", "-g", "--", "/opt/hermes/docker/entrypoint.sh" ]
+ENV LANG=ko_KR.UTF-8 \
+    LC_ALL=ko_KR.UTF-8 \
+    LANGUAGE=ko_KR:ko \
+    TZ=Asia/Singapore \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# -----------------------------------------------------------------------------
+# WVB Config Bootstrap
+# -----------------------------------------------------------------------------
+# config.yaml은 Railway 첫 부팅 시 /opt/data 에 없으면 이 스크립트가 복사
+# -----------------------------------------------------------------------------
+WORKDIR /opt/wvb-bootstrap
+
+# Skill 디렉토리 (WVB 도메인 룰 미러링)
+COPY --chown=node:node config.yaml.template /opt/wvb-bootstrap/config.yaml.template
+COPY --chown=node:node skills/ /opt/wvb-bootstrap/skills/
+COPY --chown=node:node scripts/entrypoint.sh /opt/wvb-bootstrap/entrypoint.sh
+COPY --chown=node:node scripts/healthcheck.sh /opt/wvb-bootstrap/healthcheck.sh
+
+RUN chmod +x /opt/wvb-bootstrap/entrypoint.sh /opt/wvb-bootstrap/healthcheck.sh
+
+# -----------------------------------------------------------------------------
+# Wiki 디렉토리 (Railway가 시작 시 submodule init/fetch — 이미지에는 포함 안 함)
+# 보안: wiki 콘텐츠를 이미지에 굽지 않음 (이미지 layer cache 외부 노출 차단)
+# -----------------------------------------------------------------------------
+RUN mkdir -p /opt/data/wiki && chown -R node:node /opt/data/wiki
+
+# -----------------------------------------------------------------------------
+# Healthcheck (Railway가 /health 엔드포인트 polling — 공식 gateway 제공)
+# -----------------------------------------------------------------------------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /opt/wvb-bootstrap/healthcheck.sh || exit 1
+
+USER node
+
+# -----------------------------------------------------------------------------
+# Gateway run + Telegram polling
+# entrypoint.sh: config.yaml bootstrap → wiki submodule update → gateway run
+# -----------------------------------------------------------------------------
+WORKDIR /opt/data
+EXPOSE 8642
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/wvb-bootstrap/entrypoint.sh"]
+CMD ["gateway", "run"]

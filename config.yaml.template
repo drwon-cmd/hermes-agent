@@ -1,0 +1,200 @@
+# =============================================================================
+# Hermes Agent Config Template (WVB 24/7 비서실장)
+# 위치(런타임): /opt/data/config.yaml (Railway volume)
+# 위치(이미지): /opt/wvb-bootstrap/config.yaml.template
+# Bootstrap: entrypoint.sh가 첫 부팅 시 ${VAR} 치환하여 /opt/data로 복사
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Gateway: OpenAI-compatible API server (port 8642)
+# -----------------------------------------------------------------------------
+gateway:
+  host: "0.0.0.0"  # Railway internal network only (public domain 비활성화)
+  port: 8642
+
+# -----------------------------------------------------------------------------
+# Models — LLM provider 라우팅 (Plan §3.3, Design §5)
+# -----------------------------------------------------------------------------
+providers:
+  groq:
+    api_key: "${GROQ_API_KEY}"
+    base_url: "https://api.groq.com/openai/v1"
+
+  anthropic:
+    api_key: "${ANTHROPIC_API_KEY}"
+
+  openai:
+    # Whisper STT 용도 (cost-guard.md STT 가드 — $0.006/min)
+    api_key: "${OPENAI_API_KEY}"
+
+# 디폴트 모델: Groq Llama 3.3 70B (무료, 한국어 OK)
+model_aliases:
+  default:
+    model: "llama-3.3-70b-versatile"
+    provider: "groq"
+
+  # 고난도 escalation: 법무·재무·정밀 분석
+  smart:
+    model: "claude-opus-4-7"
+    provider: "anthropic"
+
+  # 고속 단순 작업 (분류·라우팅)
+  fast:
+    model: "llama-3.1-8b-instant"
+    provider: "groq"
+
+# 디폴트 라우팅
+default_model: "default"
+
+# -----------------------------------------------------------------------------
+# STT (Speech-to-Text) — 텔레그램 음성 메모 자동 전사
+# cost-guard.md: OpenAI Whisper API 권장 ($0.006/min, 가성비 최고)
+# -----------------------------------------------------------------------------
+stt:
+  provider: "openai"
+  openai:
+    model: "whisper-1"
+  # 자동 처리 한도: 10분 이하만 (10분 초과 시 사용자 확인)
+  max_duration_minutes: 10
+
+# -----------------------------------------------------------------------------
+# Channels — Phase 1 텔레그램 단독
+# -----------------------------------------------------------------------------
+channels:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    # 인가된 사용자만 응답 (security.md §3)
+    allowed_user_ids:
+      - "${TELEGRAM_AUTHORIZED_USER_ID}"
+    admin_chat_id: "${TELEGRAM_ADMIN_CHAT_ID}"
+    # 비인가 메시지 → admin 알림
+    unauthorized_action: "notify_admin"
+    # 음성 메모 자동 전사
+    transcribe_voice: true
+
+  # Phase 1.5 디스코드 (현재 비활성)
+  discord:
+    enabled: false
+    # bot_token: "${DISCORD_BOT_TOKEN}"
+
+  # 외부 발신 채널 (Phase 1 완전 차단 — CCO 게이트)
+  email:
+    enabled: false
+  slack:
+    enabled: false
+
+# -----------------------------------------------------------------------------
+# External Send Gate — CCO compliance (Plan §7, Design §9)
+# -----------------------------------------------------------------------------
+external_send:
+  mode: "${HERMES_EXTERNAL_SEND_MODE:-disabled}"
+  # 모드: "disabled" (Phase 1 디폴트) | "draft_only" | "send"
+  # draft_only 시: 초안만 텔레그램으로 전달, 사용자가 직접 send
+
+# -----------------------------------------------------------------------------
+# Cost Guard — 월 한도 (cost-guard.md)
+# -----------------------------------------------------------------------------
+cost_guard:
+  monthly_alert_usd: 10
+  monthly_block_usd: 15
+  block_action: "force_groq_fallback"  # Anthropic 차단, Groq만 사용
+  alert_channel: "telegram_admin"
+
+# -----------------------------------------------------------------------------
+# Skills — Built-in + WVB 도메인 미러링
+# -----------------------------------------------------------------------------
+skills:
+  enabled:
+    - daily-brief        # 일일 브리핑 (WVB 도메인)
+    - weekly-signal      # 주간 시그널 (WVB 도메인)
+    - biz-list-review    # biz list pipeline review
+    - calendar-prep      # 캘린더 prep
+    - wiki-lookup        # wiki/ read-only 검색
+    - cost-report        # 일일 비용 리포트
+
+  disabled:
+    # 외부 발신 skill 전부 차단
+    - email-send
+    - slack-send
+    - calendar-invite-send
+    # Phase 1에서는 self-evolving 차단 (변경 제안만 알림)
+    - skill-auto-promote
+
+  # 플랫폼별 disabled
+  platform_disabled:
+    telegram:
+      # Telegram에서만 차단할 skill (없음)
+
+# -----------------------------------------------------------------------------
+# Wiki Read-only Sync (Design §8)
+# -----------------------------------------------------------------------------
+wiki:
+  enabled: true
+  path: "/opt/data/wiki"
+  # 6시간마다 git submodule update
+  sync_interval_hours: 6
+  read_only: true  # write 시도 시 즉시 reject
+
+# -----------------------------------------------------------------------------
+# Cron Jobs (Design §7)
+# Time zone: Asia/Singapore (TZ=Asia/Singapore env에 따름)
+# -----------------------------------------------------------------------------
+cron:
+  jobs:
+    - name: daily-brief
+      schedule: "0 6 * * *"      # 매일 06:00 SGT
+      skill: daily-brief
+      model: default              # Groq
+
+    - name: calendar-prep-evening
+      schedule: "0 21 * * *"     # 매일 21:00 SGT
+      skill: calendar-prep
+      model: default
+
+    - name: weekly-signal
+      schedule: "0 18 * * 0"     # 매주 일요일 18:00 SGT
+      skill: weekly-signal
+      model: smart                # Anthropic (장문 종합)
+
+    - name: biz-list-review
+      schedule: "0 17 * * 5"     # 매주 금요일 17:00 SGT
+      skill: biz-list-review
+      model: default
+
+    - name: wiki-sync
+      schedule: "0 */6 * * *"    # 매 6시간
+      command: "git -C /opt/data/wiki submodule update --remote --depth 1 || true"
+
+    - name: cost-report
+      schedule: "0 2 * * *"      # 매일 02:00 SGT
+      skill: cost-report
+      model: default
+
+# -----------------------------------------------------------------------------
+# Security (security.md §1-6 미러링)
+# -----------------------------------------------------------------------------
+security:
+  # Prompt injection 방어
+  external_input_tag: "<external_input>"
+  reject_indirect_commands: true
+
+  # Input validation
+  max_message_length: 4096  # Telegram 한도
+
+  # Error handling
+  expose_stack_trace_to_user: false
+  log_errors_to_admin: true
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level: "${LOG_LEVEL:-info}"
+  format: "${LOG_FORMAT:-json}"
+  # Railway 내장 logging 사용 (stdout)
+  destination: stdout
+
+  # 라우팅 통계 (Plan §2.3 Success Criteria 추적용)
+  log_routing_decisions: true
+  log_costs: true

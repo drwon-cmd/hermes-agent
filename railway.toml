@@ -1,0 +1,36 @@
+# =============================================================================
+# railway.toml — Railway service 설정 (hermes-agent)
+# =============================================================================
+# 위치: hermes-agent fork repo root (drwon-cmd/hermes-agent)
+# Railway가 자동 감지 → service 설정에 반영
+# =============================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+# build 인자: HERMES_VERSION (Hermes 업그레이드 시 이것만 변경)
+buildCommand = "echo 'Using nousresearch/hermes-agent:v0.13.0 as base'"
+
+[deploy]
+# Telegram polling 워크로드 → 항상 1개 인스턴스
+numReplicas = 1
+# 재시작 정책: 실패 시 최대 5회 재시도 (메모리 OOM 등)
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+# 시작 명령은 Dockerfile CMD 사용 (gateway run)
+startCommand = "gateway run"
+
+# Healthcheck (Hermes gateway가 /health 제공)
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# 슬립 정책: 24/7 비서실장이라 절대 sleepable=false
+sleepApplication = false
+
+# Region: 기존 챗봇 3개와 동일하게 설정 (Railway 대시보드에서 확인 후 맞춤)
+# 권장: asia-southeast1 (Singapore) — 한국 latency 최소
+# Railway는 region을 dashboard에서 설정 (toml에서 직접 지정 불가)
+
+[experimental]
+# Railway 새 기능 — Dockerfile build 캐시 활용
+configAsCode = true
