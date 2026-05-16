@@ -22,30 +22,31 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Model (OpenRouter `:free` 무료 모델 — Llama 3.3 70B)
-# provider 명시 = "openrouter" (auto 사용 시 Anthropic 자동 fallback)
+# Model — Google Gemini 2.5 Flash (무료, Hermes 공식 24/7 personal use 권장)
+# 2026-05-16 4차 정정: OpenRouter :free → Gemini Flash
+#   - OpenRouter :free 한도 분 20/일 50 = 비서 사용 burden ↑
+#   - Gemini Flash 한도 분 15/일 1500 = generous quota
+#   - 한국어 품질 우수, 신용카드 불필요
+#   - Plan §3.3 정신 (무료 디폴트) 그대로 유지
 # -----------------------------------------------------------------------------
 model:
-  default: "meta-llama/llama-3.3-70b-instruct:free"
-  provider: "openrouter"
+  default: "gemini-2.5-flash"
+  provider: "gemini"
 
 # -----------------------------------------------------------------------------
-# Auxiliary models (vision, web_extract, session_search) — Anthropic 호출 차단
-# 2026-05-16 fix: default auto = OpenRouter→Nous→Anthropic fallback chain.
-# ANTHROPIC_API_KEY 등록되어 있어 Anthropic credit 부족 시 400. Plan §3.3 위배.
-# 모두 openrouter free로 명시 → Anthropic 호출 0건 보장.
+# Auxiliary models — 모두 Gemini Flash로 통일 (Anthropic 호출 0건 보장)
 # -----------------------------------------------------------------------------
 auxiliary:
   vision:
-    provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
+    provider: "gemini"
+    model: "gemini-2.5-flash"
   web_extract:
-    provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
+    provider: "gemini"
+    model: "gemini-2.5-flash"
   session_search:
-    provider: "openrouter"
-    model: "meta-llama/llama-3.3-70b-instruct:free"
-    max_concurrency: 1  # rate limit burst 방지 (20 req/분 한도)
+    provider: "gemini"
+    model: "gemini-2.5-flash"
+    max_concurrency: 2
 
 # -----------------------------------------------------------------------------
 # Platforms — Telegram (Phase 1)
