@@ -37,6 +37,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && locale-gen \
     && ln -sf /usr/share/zoneinfo/Asia/Singapore /etc/localtime
 
+# 2026-05-16 Phase 6b: softeria ms-365-mcp-server 사전 install (Plan v1.4 §Path B)
+# 근거: Hermes mcp_servers spawn stdio subprocess → npx 런타임 install은 첫 호출 지연 +
+#       network 불안정 시 fail. 글로벌 install로 안정성 우선.
+# npm publish: @softeria/ms-365-mcp-server v0.108.0 (2026-05 fetch 검증, MIT)
+# build-then-verify v1.7 §8 외부 의존 spot-check 통과
+RUN npm install -g @softeria/ms-365-mcp-server@0.108.0 \
+    && npm cache clean --force
+
 ENV LANG=ko_KR.UTF-8 \
     LC_ALL=ko_KR.UTF-8 \
     LANGUAGE=ko_KR:ko \

@@ -187,6 +187,50 @@ fi
 log "Step 4 (secret grep) temporarily disabled — see Phase 1.5 task #21"
 
 # -----------------------------------------------------------------------------
+# Step 4.4: MS 365 MCP — token cache 디렉토리 준비 (Phase 6b, Plan v1.4)
+# -----------------------------------------------------------------------------
+# 2026-05-16 추가: softeria ms-365-mcp-server token cache를 Volume 영구 저장.
+# 환경:
+#   MS365_MCP_TOKEN_CACHE_PATH=/opt/data/.ms365/token-cache.json
+#   MS365_MCP_SELECTED_ACCOUNT_PATH=/opt/data/.ms365/selected-account.json
+# 디렉토리 미리 생성 + hermes user 소유 (uv venv와 동일 패턴, build-then-verify §8)
+MS365_DIR="${DATA_DIR}/.ms365"
+if ! mkdir -p "${MS365_DIR}" 2>&1; then
+    log "WARNING: mkdir ${MS365_DIR} failed — MS 365 OAuth token caching unavailable"
+else
+    chown hermes:hermes "${MS365_DIR}" 2>/dev/null || log "  ${MS365_DIR} chown skipped (non-fatal)"
+    chmod 700 "${MS365_DIR}" 2>/dev/null || true
+    log "MS365 token cache dir ready: ${MS365_DIR}"
+fi
+
+# softeria binary 검증 (Dockerfile에서 npm install -g 됐는지)
+if command -v ms-365-mcp-server >/dev/null 2>&1; then
+    log "softeria ms-365-mcp-server installed: $(ms-365-mcp-server --version 2>&1 | head -1 || echo 'version check failed')"
+else
+    log "WARNING: ms-365-mcp-server not found in PATH — Phase 6b MCP server unavailable"
+fi
+
+# Azure App credentials envvar 확인 (사용자가 Railway에서 설정해야 함)
+if [ -n "${MS365_MCP_CLIENT_ID:-}" ] && [ -n "${MS365_MCP_TENANT_ID:-}" ] && [ -n "${MS365_MCP_CLIENT_SECRET:-}" ]; then
+    log "MS365 Azure credentials detected (CLIENT_ID=${MS365_MCP_CLIENT_ID:0:8}..., TENANT=${MS365_MCP_TENANT_ID:0:8}..., SECRET=set)"
+else
+    log "INFO: MS365 envvar incomplete — removing mcp_servers.ms365 from config.yaml to prevent startup fail"
+    # envvar 미설정 시 ms365 섹션을 config.yaml에서 제거 (Hermes startup fail 방지)
+    # Hermes resilient 가정 위반 안전망 (build-then-verify §10 — 사용자 결정 정신 보존:
+    # Step 1-3 진행 중 사용자 burden 최소화)
+    if [ -f "${CONFIG_FILE}" ] && grep -q "^mcp_servers:" "${CONFIG_FILE}"; then
+        # 'mcp_servers:'부터 그 다음 top-level (들여쓰기 없는 라인)까지 제거
+        # awk로 안전한 블록 제거
+        awk '
+            /^mcp_servers:/ { in_block = 1; next }
+            in_block && /^[^[:space:]#]/ { in_block = 0 }
+            !in_block { print }
+        ' "${CONFIG_FILE}" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
+        log "  mcp_servers section removed (Hermes will start without MS365)"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # Step 4.5: Google Workspace deps verify+install (Phase 6a)
 # -----------------------------------------------------------------------------
 # 2026-05-16 추가 (사용자 결정 옵션 A, KakaoTalk_175312637 RCA):

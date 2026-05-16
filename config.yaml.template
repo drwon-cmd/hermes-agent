@@ -123,3 +123,30 @@ skills:
 #   - ANTHROPIC_API_KEY (escalation 전용, 키워드 매칭 시)
 #   - TAVILY_API_KEY (Hermes 환경변수 자동 인식, config 불필요)
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# MCP Servers — Phase 6b (MS 365 통합, Plan v1.4 §Path B)
+# -----------------------------------------------------------------------------
+# 2026-05-16 추가: softeria/ms-365-mcp-server를 stdio subprocess로 등록.
+# 활성 조건: Railway envvar 3개 모두 set 시 작동 (없으면 Hermes가 시작 시도 후 skip)
+# - MS365_MCP_CLIENT_ID: Azure AD App registration의 Application (client) ID
+# - MS365_MCP_TENANT_ID: Directory (tenant) ID
+# - MS365_MCP_CLIENT_SECRET: Client Secret value (Certificates & secrets 탭)
+# - MS365_MCP_TOKEN_CACHE_PATH: Volume 경로 (entrypoint Step 4.4가 디렉토리 생성)
+# Scope: --org-mode (work account drwon@wiltvb.com용)
+# 첫 사용 시 텔레그램에서 "MS 365 setup 해줘" → device code flow OAuth
+# 검증: Hermes cli-config.yaml.example L777-790 schema
+# -----------------------------------------------------------------------------
+mcp_servers:
+  ms365:
+    command: ms-365-mcp-server
+    args:
+      - --org-mode
+    env:
+      MS365_MCP_CLIENT_ID: ${MS365_MCP_CLIENT_ID}
+      MS365_MCP_TENANT_ID: ${MS365_MCP_TENANT_ID}
+      MS365_MCP_CLIENT_SECRET: ${MS365_MCP_CLIENT_SECRET}
+      MS365_MCP_TOKEN_CACHE_PATH: /opt/data/.ms365/token-cache.json
+      MS365_MCP_SELECTED_ACCOUNT_PATH: /opt/data/.ms365/selected-account.json
+    timeout: 180
+    connect_timeout: 60
