@@ -165,6 +165,108 @@ fi
 log "Step 4 (secret grep) temporarily disabled — see Phase 1.5 task #21"
 
 # -----------------------------------------------------------------------------
+# Step 4.5: Google Workspace deps verify+install (Phase 6a)
+# -----------------------------------------------------------------------------
+# 2026-05-16 추가 (사용자 결정 옵션 A, KakaoTalk_175312637 RCA):
+#   - base image는 `uv sync --extra all`로 [google] extra 포함 빌드 (upstream
+#     pyproject.toml L151-159, L199). 그러나 setup.py L107 `subprocess.check_call(
+#     [sys.executable, "-m", "pip", "install", ...])`가 venv 안의 pip 모듈을 가정.
+#     uv venv는 pip 별도 미포함 → `No module named pip` 발생.
+#   - 봇이 setup.py --install-deps 시도할 때 항상 실패 → setup.py L118 안내대로
+#     사전 설치가 정답.
+#   - 우회: 부팅 시 venv 안에 패키지 import 가능한지 verify, 없으면 uv pip로
+#     사전 install. setup.py 호출 시점에는 이미 import 가능 → install_deps skip.
+# -----------------------------------------------------------------------------
+HERMES_VENV_PY="/opt/hermes/.venv/bin/python"
+if [ -x "${HERMES_VENV_PY}" ]; then
+    if "${HERMES_VENV_PY}" -c "import google_auth_oauthlib, googleapiclient, google_auth_httplib2" >/dev/null 2>&1; then
+        log "Google Workspace deps OK (3 packages importable in venv)"
+    else
+        log "Google Workspace deps missing — installing via uv pip (Phase 6a)"
+        if command -v uv >/dev/null 2>&1; then
+            uv pip install --python "${HERMES_VENV_PY}" --no-cache-dir \
+                google-api-python-client==2.194.0 \
+                google-auth-oauthlib==1.3.1 \
+                google-auth-httplib2==0.3.1 \
+                && log "Google Workspace deps installed via uv pip" \
+                || log "WARNING: uv pip install failed — setup.py --install-deps will continue to fail"
+        else
+            log "WARNING: uv command not found at /usr/local/bin/uv — Google deps unavailable"
+        fi
+    fi
+else
+    log "WARNING: ${HERMES_VENV_PY} not found — skipping Google deps verify"
+fi
+
+# -----------------------------------------------------------------------------
+# Step 4.6: Hermes MEMORY.md 환경 facts 부트스트랩 (Anti-Hallucination)
+# -----------------------------------------------------------------------------
+# 2026-05-16 추가 (사용자 결정 환각 대응, KakaoTalk_174844065/175312637 RCA):
+#   - 봇이 Windows 경로(C:\...AppData\Python314\...) 인용, Railway SSH 안내 등
+#     환각 빈도 증가 (Gemini 2.5 Flash 변경 후).
+#   - Hermes memory_tool.py가 ${HERMES_HOME}/memories/MEMORY.md를 session
+#     start 시 system prompt에 inject (upstream tools/memory_tool.py 확인,
+#     hermes_constants.py L14 HERMES_HOME envvar → /opt/data).
+#   - WVB Runtime Facts 5줄을 첫 부팅 시 prepend (marker grep idempotent).
+#     이후는 봇이 학습한 memory 보존.
+#   - HERMES_FORCE_MEMORY_REGEN=true 시 강제 재작성.
+# -----------------------------------------------------------------------------
+MEMORY_DIR="${DATA_DIR}/memories"
+MEMORY_FILE="${MEMORY_DIR}/MEMORY.md"
+WVB_MEMORY_MARKER="# WVB Runtime Facts (entrypoint-managed)"
+
+mkdir -p "${MEMORY_DIR}"
+chown hermes:hermes "${MEMORY_DIR}" 2>/dev/null || true
+
+if [ ! -f "${MEMORY_FILE}" ] || [ "${HERMES_FORCE_MEMORY_REGEN:-false}" = "true" ] || \
+   ! grep -qF "${WVB_MEMORY_MARKER}" "${MEMORY_FILE}" 2>/dev/null; then
+    log "Bootstrapping ${MEMORY_FILE} with WVB runtime facts"
+    cat > "${MEMORY_FILE}.wvb" <<'EOF'
+§
+# WVB Runtime Facts (entrypoint-managed)
+
+## Execution Environment
+- Runtime: Railway Linux container (debian:13.4, Python 3.13 via uv venv)
+- Python interpreter: /opt/hermes/.venv/bin/python (uv-managed, no standalone pip module)
+- HERMES_HOME: /opt/data (Railway Volume, persistent across deploys)
+- User: hermes (UID 10000), root only during entrypoint.sh boot phase
+- External SSH access: NOT possible. Railway exposes only Console/Variables/Volume tabs.
+
+## Anti-Hallucination Rules
+- DO NOT cite Windows paths (C:\..., AppData, Python314) — user local env is invisible
+- DO NOT instruct user to run `pip install` or `python -m pip` — uv venv has no pip
+- For package install: use `uv pip install --python /opt/hermes/.venv/bin/python <pkg>`
+- DO NOT ask user to SSH into the Railway container — environmentally impossible
+- BEFORE quoting any path/command: verify via `ls`, `cat`, or `which` first
+- Google Workspace deps (google-api-python-client, google-auth-oauthlib, google-auth-httplib2)
+  are PRE-INSTALLED at boot by entrypoint.sh Step 4.5 — setup.py --check should succeed
+  without invoking --install-deps. If setup.py errors out on pip, re-run setup without
+  --install-deps.
+
+## Skill Sources
+- WVB domain skills: /opt/data/skills/wvb/* (synced from image at every boot)
+- Hermes bundled skills: /opt/data/skills/* (Google Workspace, productivity, media)
+- Personal Data Protection: wiki/_personal/, SOUL.md, USER.md, ACCESS_POLICY.md,
+  HEARTBEAT.md are CCO-blocked — refuse access requests
+
+EOF
+
+    if [ -f "${MEMORY_FILE}" ] && [ "${HERMES_FORCE_MEMORY_REGEN:-false}" != "true" ]; then
+        cat "${MEMORY_FILE}.wvb" "${MEMORY_FILE}" > "${MEMORY_FILE}.merged"
+        mv "${MEMORY_FILE}.merged" "${MEMORY_FILE}"
+        rm -f "${MEMORY_FILE}.wvb"
+        log "WVB facts prepended to existing MEMORY.md ($(wc -l < "${MEMORY_FILE}") lines)"
+    else
+        mv "${MEMORY_FILE}.wvb" "${MEMORY_FILE}"
+        log "MEMORY.md created with WVB runtime facts ($(wc -l < "${MEMORY_FILE}") lines)"
+    fi
+    chown hermes:hermes "${MEMORY_FILE}" 2>/dev/null || true
+    chmod 644 "${MEMORY_FILE}"
+else
+    log "MEMORY.md already has WVB facts marker — skipping bootstrap"
+fi
+
+# -----------------------------------------------------------------------------
 # Step 5: Hermes gateway 시작
 # -----------------------------------------------------------------------------
 log "Starting Hermes gateway: $*"
