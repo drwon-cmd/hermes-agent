@@ -75,6 +75,27 @@ display:
   language: "ko"
 
 # -----------------------------------------------------------------------------
+# Skills external directories — WVB 도메인 skill 발견
+# 2026-05-16 fix (cto-lead 17번째 실수):
+#   Hermes default scan = ~/.hermes/skills/ 만 (= /opt/data/.hermes/skills/)
+#   entrypoint.sh가 /opt/data/skills/wvb/ 로 copy했지만 config.yaml 명시 안 함 → 미발견
+#   → external_dirs 명시 (Hermes docs: "External dirs require explicit configuration")
+# -----------------------------------------------------------------------------
+skills:
+  external_dirs:
+    - /opt/data/skills/wvb
+
+# -----------------------------------------------------------------------------
+# Web search/extraction — Tavily 활성 (Phase 4.5 통합)
+# 환경변수 TAVILY_API_KEY 등록되어 있어야 작동
+# -----------------------------------------------------------------------------
+web:
+  search:
+    provider: "tavily"
+  extract:
+    provider: "tavily"
+
+# -----------------------------------------------------------------------------
 # WVB 도메인 정책 (envvar 처리, config.yaml 영향 없음)
 #   - HERMES_EXTERNAL_SEND_MODE (CCO 게이트)
 #   - ANTHROPIC_API_KEY (escalation 전용, 키워드 매칭 시)

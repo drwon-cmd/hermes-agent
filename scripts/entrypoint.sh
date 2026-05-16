@@ -20,12 +20,13 @@ log() {
 # -----------------------------------------------------------------------------
 # Step 1: config.yaml bootstrap (template → 환경변수 치환 → /opt/data)
 # -----------------------------------------------------------------------------
-# 2026-05-16 fix (cto-lead 6번째·D2 main review): 빈 파일 처리 + envsubst 검증
+# 2026-05-16 fix (cto-lead 6·17번째 + main review): 빈 파일 처리 + envsubst 검증 + force-regen
 # - L23 -f 만 체크 → -s (size > 0) 도 체크 (envsubst 실패 시 빈 파일이 남는 사고 방지)
 # - envsubst 명령어 존재 확인 (gettext-base 없으면 fail-fast)
 # - envsubst 결과 검증 (빈 파일이면 재시도 또는 fail)
-if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ]; then
-    log "config.yaml not found or empty, bootstrapping from template"
+# - HERMES_FORCE_CONFIG_REGEN=true 시 옛 config 무시하고 강제 재생성 (template 변경 즉시 반영)
+if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ] || [ "${HERMES_FORCE_CONFIG_REGEN:-false}" = "true" ]; then
+    log "config.yaml regenerate (missing/empty or HERMES_FORCE_CONFIG_REGEN=true)"
 
     # envsubst 명령 존재 확인 (Dockerfile gettext-base 누락 시 명확한 에러)
     if ! command -v envsubst >/dev/null 2>&1; then
