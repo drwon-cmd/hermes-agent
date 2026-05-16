@@ -34,10 +34,12 @@ if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ]; then
     fi
 
     # 필수 환경변수 검증 (없으면 fail-fast)
+    # 2026-05-16 fix (cto-lead 10번째 실수): Hermes 공식 변수명 TELEGRAM_ALLOWED_USERS
+    # cto-lead가 TELEGRAM_AUTHORIZED_USER_ID 가정 (단수) → 실제는 TELEGRAM_ALLOWED_USERS (복수)
     : "${GROQ_API_KEY:?GROQ_API_KEY required}"
     : "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required}"
     : "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN required}"
-    : "${TELEGRAM_AUTHORIZED_USER_ID:?TELEGRAM_AUTHORIZED_USER_ID required}"
+    : "${TELEGRAM_ALLOWED_USERS:?TELEGRAM_ALLOWED_USERS required (comma-separated numeric user IDs)}"
     : "${TELEGRAM_ADMIN_CHAT_ID:?TELEGRAM_ADMIN_CHAT_ID required}"
 
     # envsubst로 ${VAR} 치환 + 결과 검증
