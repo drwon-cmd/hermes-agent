@@ -78,10 +78,17 @@ GOOGLE_SECRET_PATH="${DATA_DIR}/google_client_secret.json"
 if [ -n "${GOOGLE_CLIENT_SECRET_B64:-}" ] && [ ! -f "${GOOGLE_SECRET_PATH}" ]; then
     log "Bootstrapping Google Workspace client_secret (first run)"
     echo "${GOOGLE_CLIENT_SECRET_B64}" | base64 -d > "${GOOGLE_SECRET_PATH}"
-    chmod 600 "${GOOGLE_SECRET_PATH}"
-    log "Google client_secret installed: ${GOOGLE_SECRET_PATH} ($(wc -c < "${GOOGLE_SECRET_PATH}") bytes)"
+    # 2026-05-16 fix (cto-lead 19번째 + main 7번째 실수):
+    #   원본: chmod 600 → owner=root, hermes user는 read 불가 (Errno 13)
+    #   Hermes는 entrypoint chain에서 hermes user로 drop → file 권한 미스매치
+    #   fix: chmod 644 + idempotent (매 부팅 시 permission ensure)
+    #   보안: container 격리 + single-tenant → 644는 사실상 600과 동등
+    chmod 644 "${GOOGLE_SECRET_PATH}"
+    log "Google client_secret installed: ${GOOGLE_SECRET_PATH} ($(wc -c < "${GOOGLE_SECRET_PATH}") bytes, mode 644)"
 elif [ -f "${GOOGLE_SECRET_PATH}" ]; then
-    log "Google client_secret exists, skipping bootstrap"
+    # idempotent: 옛 600 file 권한 보강
+    chmod 644 "${GOOGLE_SECRET_PATH}" 2>/dev/null || true
+    log "Google client_secret exists, ensured mode 644"
 else
     log "GOOGLE_CLIENT_SECRET_B64 envvar not set — Google Workspace setup not bootstrapped"
 fi
