@@ -17,6 +17,28 @@ log() {
     echo "${LOG_PREFIX} $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"
 }
 
+# 2026-05-16 18:40 fix: fabulous-patience 환경 runtime 사망 진단용 robust logging.
+# set -e trigger 정확한 line을 잡기 위해 ERR trap + 시작 직후 env/state dump 추가.
+on_err() {
+    local exit_code=$?
+    local line_no=${1:-?}
+    log "FATAL ERR trap: exit=${exit_code} at line ${line_no}"
+    log "  pwd=$(pwd)"
+    log "  whoami=$(whoami 2>&1 || echo '?')"
+    log "  ls /opt/data: $(ls -la /opt/data 2>&1 | head -5 | tr '\n' '|' || true)"
+    exit ${exit_code}
+}
+trap 'on_err ${LINENO}' ERR
+
+# 부팅 직후 환경 dump (한 번)
+log "=== Boot diagnostic ==="
+log "User: $(id -u 2>&1):$(id -g 2>&1) ($(whoami 2>&1 || echo '?'))"
+log "Working dir: $(pwd)"
+log "Volume /opt/data: $(ls -la /opt/data 2>/dev/null | head -3 | tr '\n' '|' || echo 'MISSING')"
+log "Required envvars set: GOOGLE_API_KEY=${GOOGLE_API_KEY:+set}${GOOGLE_API_KEY:-MISSING}, TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+set}${TELEGRAM_BOT_TOKEN:-MISSING}, TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:+set}${TELEGRAM_ALLOWED_USERS:-MISSING}, TELEGRAM_ADMIN_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID:+set}${TELEGRAM_ADMIN_CHAT_ID:-MISSING}"
+log "Optional envvars: GOOGLE_CLIENT_SECRET_B64=${GOOGLE_CLIENT_SECRET_B64:+set (${#GOOGLE_CLIENT_SECRET_B64} chars)}${GOOGLE_CLIENT_SECRET_B64:-unset}, OPENAI_API_KEY=${OPENAI_API_KEY:+set}${OPENAI_API_KEY:-unset}, WIKI_REPO_URL=${WIKI_REPO_URL:+set}${WIKI_REPO_URL:-unset}"
+log "=== End boot diagnostic ==="
+
 # -----------------------------------------------------------------------------
 # Step 1: config.yaml bootstrap (template → 환경변수 치환 → /opt/data)
 # -----------------------------------------------------------------------------
@@ -215,10 +237,22 @@ MEMORY_DIR="${DATA_DIR}/memories"
 MEMORY_FILE="${MEMORY_DIR}/MEMORY.md"
 WVB_MEMORY_MARKER="# WVB Runtime Facts (entrypoint-managed)"
 
-mkdir -p "${MEMORY_DIR}"
-chown hermes:hermes "${MEMORY_DIR}" 2>/dev/null || true
+log "Step 4.6 enter: MEMORY_DIR=${MEMORY_DIR}"
+log "  DATA_DIR perms: $(ls -ld ${DATA_DIR} 2>&1 || echo 'MISSING')"
 
-if [ ! -f "${MEMORY_FILE}" ] || [ "${HERMES_FORCE_MEMORY_REGEN:-false}" = "true" ] || \
+# Volume 권한 문제로 mkdir 실패 가능 — robust handling
+if ! mkdir -p "${MEMORY_DIR}" 2>&1; then
+    log "WARNING: mkdir -p ${MEMORY_DIR} failed (continuing without MEMORY.md bootstrap)"
+    MEMORY_DIR=""
+fi
+if [ -n "${MEMORY_DIR}" ]; then
+    chown hermes:hermes "${MEMORY_DIR}" 2>/dev/null || log "  chown skipped (non-fatal)"
+    log "  MEMORY_DIR ready: $(ls -ld ${MEMORY_DIR} 2>&1 | head -1)"
+fi
+
+if [ -z "${MEMORY_DIR}" ]; then
+    log "Skipping MEMORY.md bootstrap (mkdir failed earlier)"
+elif [ ! -f "${MEMORY_FILE}" ] || [ "${HERMES_FORCE_MEMORY_REGEN:-false}" = "true" ] || \
    ! grep -qF "${WVB_MEMORY_MARKER}" "${MEMORY_FILE}" 2>/dev/null; then
     log "Bootstrapping ${MEMORY_FILE} with WVB runtime facts"
     cat > "${MEMORY_FILE}.wvb" <<'EOF'
