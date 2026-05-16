@@ -70,10 +70,24 @@ platform_toolsets:
     - tts         # 음성 출력
     - todo        # 작업 추적
     - cronjob     # 일정 자동화
-    - messaging   # 텔레그램 응답
+    - send_message  # 텔레그램 응답 (공식 키: hermes-telegram preset 명시)
+    # 2026-05-16 fix: messaging → send_message
+    # cli-config.yaml.example "hermes-telegram - ... send_message" 인용
+    # invalid 키 1개로 list 전체 silent ignore 가능성 차단
     # browser 제외 (Chrome 없어서 fail)
     # terminal 제외 (Phase 1 보안 — 외부 명령 실행 차단)
     # image_gen 제외 (Phase 1 미사용)
+
+# -----------------------------------------------------------------------------
+# Web Search Backend — Tavily 명시 (자동 감지 보강)
+# 근거: tools/web_tools.py L178 "1. web.backend from config.yaml"
+# auto-detection priority: firecrawl → parallel → tavily → exa → searxng → brave-free → ddgs
+# TAVILY_API_KEY envvar 자동 감지 가능하지만 명시로 안정성 ↑
+# 2026-05-16 fix: main 5차 실수(`web:` 섹션 완전 제거)는 over-correction였음
+# example에 없어도 source code에서 읽음 — v1.8 §11 자기 정정
+# -----------------------------------------------------------------------------
+web:
+  backend: "tavily"
 
 # -----------------------------------------------------------------------------
 # Telegram top-level
