@@ -141,12 +141,21 @@ mcp_servers:
   ms365:
     command: ms-365-mcp-server
     args:
-      - --org-mode
+      # 2026-05-16 fix: Gemini 2.5 Flash paid Tier 1 한도 분당 1M input tokens 초과 사고.
+      # softeria 200+ tools schema가 매 호출 system prompt에 다 들어가면서 폭증.
+      # --preset comma-separated (README L491) 적용으로 30-50개 도구로 축소.
+      # Scope (mail+calendar+files) = 사용자가 인증한 Mail.Read/Send + Calendars.Read +
+      # Files.Read.All 권한과 정확히 매칭.
+      - --preset
+      - mail,calendar,files
+      - --org-mode  # work account (drwon@wiltvb.com) 지원
     env:
       MS365_MCP_CLIENT_ID: ${MS365_MCP_CLIENT_ID}
       MS365_MCP_TENANT_ID: ${MS365_MCP_TENANT_ID}
       MS365_MCP_CLIENT_SECRET: ${MS365_MCP_CLIENT_SECRET}
       MS365_MCP_TOKEN_CACHE_PATH: /opt/data/.ms365/token-cache.json
       MS365_MCP_SELECTED_ACCOUNT_PATH: /opt/data/.ms365/selected-account.json
+      # README L505: Graph $top hard cap — 리스트 응답 크기 제한 (출력 token 절감)
+      MS365_MCP_MAX_TOP: "15"
     timeout: 180
     connect_timeout: 60
