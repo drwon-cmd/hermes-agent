@@ -5,27 +5,28 @@
 # Bootstrap: entrypoint.sh가 첫 부팅 시 ${VAR} 치환하여 /opt/data로 복사
 # =============================================================================
 #
-# 2026-05-16 cto-lead 11번째 + main 판단실수 정정:
+# 2026-05-16 cto-lead 11번째 + main 판단실수 정정 (3차):
 #   - cto-lead 원본: 자체 명명 schema → Hermes 무시 → 401 fail
 #   - main 1차 정정: anthropic/claude-opus-4.6 디폴트 → ❌ Plan §3.3 위배 (사용자
 #     결정: Groq 무료 디폴트). cost-guard.md 위반. 즉시 롤백.
-#   - 2차 정정 (현재): Groq의 OpenAI 호환 endpoint 우회 → 무료 유지
+#   - main 2차 정정: OPENAI_BASE_URL=Groq → ❌ OPENAI_API_KEY가 Whisper STT용
+#     (김실장 동일 key, 사용자 옵션 B 결정). Groq key로 변경 시 STT 영향. 즉시 롤백.
+#   - 3차 정정 (현재): OpenRouter 무료 모델 (`:free` 접미사) 경유 → 무료 유지,
+#     STT용 OPENAI_API_KEY 보존, 신규 OPENROUTER_API_KEY만 추가
 #
 # Phase 1 정책 (Plan §3.3 사용자 결정 그대로):
-#   - default model = Groq Llama 3.3 70B Versatile (무료)
-#   - provider = openai (Hermes 인식) → base_url = Groq endpoint
-#   - 환경변수 OPENAI_API_KEY = Groq key (gsk_...) — Hermes service 내부만 적용
-#   - 김실장 service의 OPENAI_API_KEY (실제 OpenAI key)는 별개 (다른 Railway service)
+#   - default model = Llama 3.3 70B via OpenRouter (:free 무료 티어)
+#   - provider = openrouter (Hermes native 지원)
+#   - 환경변수 OPENROUTER_API_KEY 신규 + OPENAI_API_KEY 그대로 (STT용)
 #   - Anthropic은 escalation 전용 (Plan §5 한도 $10)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Model (Groq via OpenAI-compatible endpoint — 무료)
+# Model (OpenRouter `:free` 무료 모델 — Llama 3.3 70B)
 # -----------------------------------------------------------------------------
 model:
-  default: "openai/llama-3.3-70b-versatile"
-  provider: "openai"
-  base_url: "https://api.groq.com/openai/v1"
+  default: "meta-llama/llama-3.3-70b-instruct:free"
+  provider: "openrouter"
 
 # -----------------------------------------------------------------------------
 # Platforms — Telegram (Phase 1)
