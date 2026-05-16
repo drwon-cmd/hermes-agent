@@ -331,7 +331,7 @@ fi
 # -----------------------------------------------------------------------------
 MEMORY_DIR="${DATA_DIR}/memories"
 MEMORY_FILE="${MEMORY_DIR}/MEMORY.md"
-WVB_MEMORY_MARKER="# WVB Runtime Facts (entrypoint-managed)"
+WVB_MEMORY_MARKER="# WVB Runtime Facts v2 (entrypoint-managed, with MS 365 rules)"
 
 log "Step 4.6 enter: MEMORY_DIR=${MEMORY_DIR}"
 log "  DATA_DIR perms: $(ls -ld ${DATA_DIR} 2>&1 || echo 'MISSING')"
@@ -353,7 +353,7 @@ elif [ ! -f "${MEMORY_FILE}" ] || [ "${HERMES_FORCE_MEMORY_REGEN:-false}" = "tru
     log "Bootstrapping ${MEMORY_FILE} with WVB runtime facts"
     cat > "${MEMORY_FILE}.wvb" <<'EOF'
 §
-# WVB Runtime Facts (entrypoint-managed)
+# WVB Runtime Facts v2 (entrypoint-managed, with MS 365 rules)
 
 ## Execution Environment
 - Runtime: Railway Linux container (debian:13.4, Python 3.13 via uv venv)
