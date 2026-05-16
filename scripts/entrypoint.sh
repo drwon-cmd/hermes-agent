@@ -121,5 +121,8 @@ log "Config: ${CONFIG_FILE}"
 log "Data dir: ${DATA_DIR}"
 log "Wiki: ${WIKI_DIR} ($(ls -1 "${WIKI_DIR}" 2>/dev/null | wc -l) entries)"
 
-# Hermes 공식 entrypoint 위임
-exec hermes "$@"
+# 2026-05-16 fix (cto-lead 14번째 실수, W1 발현):
+#   'exec hermes "$@"' → USER hermes의 PATH에 hermes 바이너리 없음 → exit
+#   해결: Hermes 공식 entrypoint chain → user drop + PATH 설정 + hermes 실행 모두 위임
+#   공식 ENTRYPOINT (참조): /usr/bin/tini -g -- /opt/hermes/docker/entrypoint.sh
+exec /opt/hermes/docker/entrypoint.sh "$@"

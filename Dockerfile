@@ -84,5 +84,7 @@ USER hermes
 WORKDIR /opt/data
 EXPOSE 8642
 
+# 2026-05-16 fix (cto-lead 12번째 실수): Hermes 공식 명령은 'hermes gateway' (run 없음)
+# CMD에서 "run" 제거 → entrypoint.sh가 "gateway"만 args로 받음 → 공식 entrypoint chain에 정확히 전달
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/wvb-bootstrap/entrypoint.sh"]
-CMD ["gateway", "run"]
+CMD ["gateway"]
