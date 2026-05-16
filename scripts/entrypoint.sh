@@ -61,6 +61,32 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# Step 1.5: Google Workspace OAuth client_secret 자동 배치 (Phase 6a)
+# -----------------------------------------------------------------------------
+# 2026-05-16 추가: GOOGLE_CLIENT_SECRET_B64 envvar 자동 감지 → Volume root에 decode
+#   사용 방식 (텔레그램 setup 시):
+#     "/opt/data/google_client_secret.json으로 Google Workspace setup 해줘"
+#   → Hermes agent가 setup.py --client-secret /opt/data/google_client_secret.json 호출
+#   → setup.py가 HERMES_HOME(자동 발견)에 복사 + cleanup
+#
+# 근거: skills/productivity/google-workspace/scripts/setup.py L47, L283 fetch
+#   CLIENT_SECRET_PATH = HERMES_HOME / "google_client_secret.json"
+#   --client-secret 인자로 PATH install 지원
+# -----------------------------------------------------------------------------
+GOOGLE_SECRET_PATH="${DATA_DIR}/google_client_secret.json"
+
+if [ -n "${GOOGLE_CLIENT_SECRET_B64:-}" ] && [ ! -f "${GOOGLE_SECRET_PATH}" ]; then
+    log "Bootstrapping Google Workspace client_secret (first run)"
+    echo "${GOOGLE_CLIENT_SECRET_B64}" | base64 -d > "${GOOGLE_SECRET_PATH}"
+    chmod 600 "${GOOGLE_SECRET_PATH}"
+    log "Google client_secret installed: ${GOOGLE_SECRET_PATH} ($(wc -c < "${GOOGLE_SECRET_PATH}") bytes)"
+elif [ -f "${GOOGLE_SECRET_PATH}" ]; then
+    log "Google client_secret exists, skipping bootstrap"
+else
+    log "GOOGLE_CLIENT_SECRET_B64 envvar not set — Google Workspace setup not bootstrapped"
+fi
+
+# -----------------------------------------------------------------------------
 # Step 2: WVB Skill 디렉토리 force sync (매 시작 시 최신 skill 반영)
 # 2026-05-16 fix (cto-lead 18번째 실수 + main spot-check):
 #   - 원본: SKILLS_SRC=/opt/wvb-bootstrap/skills (27 카테고리 + wvb 통째) → 이중 wvb 경로
