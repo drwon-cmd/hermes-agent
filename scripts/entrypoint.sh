@@ -78,17 +78,23 @@ GOOGLE_SECRET_PATH="${DATA_DIR}/google_client_secret.json"
 if [ -n "${GOOGLE_CLIENT_SECRET_B64:-}" ] && [ ! -f "${GOOGLE_SECRET_PATH}" ]; then
     log "Bootstrapping Google Workspace client_secret (first run)"
     echo "${GOOGLE_CLIENT_SECRET_B64}" | base64 -d > "${GOOGLE_SECRET_PATH}"
-    # 2026-05-16 fix (cto-lead 19번째 + main 7번째 실수):
-    #   원본: chmod 600 → owner=root, hermes user는 read 불가 (Errno 13)
-    #   Hermes는 entrypoint chain에서 hermes user로 drop → file 권한 미스매치
-    #   fix: chmod 644 + idempotent (매 부팅 시 permission ensure)
-    #   보안: container 격리 + single-tenant → 644는 사실상 600과 동등
+    # 2026-05-16 fix (main 7·8번째 추측 실수 누적):
+    #   - 7번째: chmod 600 → read 불가 (Errno 13 on read)
+    #   - 8번째: chmod 644 → read OK + write 불가 (Errno 13 on write)
+    #     이유: setup.py L283 CLIENT_SECRET_PATH.write_text(json.dumps(data))
+    #     setup.py가 HERMES_HOME(/opt/data) 경로에 같은 이름으로 다시 write 시도
+    #     input path = output path = /opt/data/google_client_secret.json
+    #   fix: chown hermes:hermes + chmod 644
+    #     - owner=hermes → setup.py가 read+write 모두 가능
+    #     - chown은 root entrypoint 단계에서만 가능 (지금 단계 root OK)
+    chown hermes:hermes "${GOOGLE_SECRET_PATH}" 2>/dev/null || true
     chmod 644 "${GOOGLE_SECRET_PATH}"
-    log "Google client_secret installed: ${GOOGLE_SECRET_PATH} ($(wc -c < "${GOOGLE_SECRET_PATH}") bytes, mode 644)"
+    log "Google client_secret installed: ${GOOGLE_SECRET_PATH} ($(wc -c < "${GOOGLE_SECRET_PATH}") bytes, owner=hermes, mode 644)"
 elif [ -f "${GOOGLE_SECRET_PATH}" ]; then
-    # idempotent: 옛 600 file 권한 보강
+    # idempotent: 옛 root-owned file ownership + permission 보강
+    chown hermes:hermes "${GOOGLE_SECRET_PATH}" 2>/dev/null || true
     chmod 644 "${GOOGLE_SECRET_PATH}" 2>/dev/null || true
-    log "Google client_secret exists, ensured mode 644"
+    log "Google client_secret exists, ensured owner=hermes + mode 644"
 else
     log "GOOGLE_CLIENT_SECRET_B64 envvar not set — Google Workspace setup not bootstrapped"
 fi
