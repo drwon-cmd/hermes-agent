@@ -23,10 +23,29 @@
 
 # -----------------------------------------------------------------------------
 # Model (OpenRouter `:free` 무료 모델 — Llama 3.3 70B)
+# provider 명시 = "openrouter" (auto 사용 시 Anthropic 자동 fallback)
 # -----------------------------------------------------------------------------
 model:
   default: "meta-llama/llama-3.3-70b-instruct:free"
   provider: "openrouter"
+
+# -----------------------------------------------------------------------------
+# Auxiliary models (vision, web_extract, session_search) — Anthropic 호출 차단
+# 2026-05-16 fix: default auto = OpenRouter→Nous→Anthropic fallback chain.
+# ANTHROPIC_API_KEY 등록되어 있어 Anthropic credit 부족 시 400. Plan §3.3 위배.
+# 모두 openrouter free로 명시 → Anthropic 호출 0건 보장.
+# -----------------------------------------------------------------------------
+auxiliary:
+  vision:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+  web_extract:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+  session_search:
+    provider: "openrouter"
+    model: "meta-llama/llama-3.3-70b-instruct:free"
+    max_concurrency: 1  # rate limit burst 방지 (20 req/분 한도)
 
 # -----------------------------------------------------------------------------
 # Platforms — Telegram (Phase 1)

@@ -36,11 +36,15 @@ if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ]; then
     # 필수 환경변수 검증 (없으면 fail-fast)
     # 2026-05-16 fix (cto-lead 10번째 실수): Hermes 공식 변수명 TELEGRAM_ALLOWED_USERS
     # cto-lead가 TELEGRAM_AUTHORIZED_USER_ID 가정 (단수) → 실제는 TELEGRAM_ALLOWED_USERS (복수)
-    : "${GROQ_API_KEY:?GROQ_API_KEY required}"
-    : "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY required}"
+    #
+    # 2026-05-16 추가 fix: Phase 1 무료 정신 (Plan §3.3)
+    # ANTHROPIC_API_KEY, GROQ_API_KEY는 optional (Phase 1.5에서 escalation 추가 시)
+    # OPENROUTER_API_KEY가 Phase 1 default LLM 호출용
+    : "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY required (Phase 1 default LLM provider)}"
     : "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN required}"
     : "${TELEGRAM_ALLOWED_USERS:?TELEGRAM_ALLOWED_USERS required (comma-separated numeric user IDs)}"
     : "${TELEGRAM_ADMIN_CHAT_ID:?TELEGRAM_ADMIN_CHAT_ID required}"
+    # OPENAI_API_KEY는 STT (Whisper) 전용으로 optional. 음성 입력 사용 시만 필요.
 
     # envsubst로 ${VAR} 치환 + 결과 검증
     envsubst < "${TEMPLATE_FILE}" > "${CONFIG_FILE}.tmp"
