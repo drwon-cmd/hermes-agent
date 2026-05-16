@@ -61,15 +61,20 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Step 2: Skill 디렉토리 복사 (WVB 도메인 skill을 Hermes skills 경로로)
+# Step 2: WVB Skill 디렉토리 force sync (매 시작 시 최신 skill 반영)
+# 2026-05-16 fix (cto-lead 18번째 실수 + main spot-check):
+#   - 원본: SKILLS_SRC=/opt/wvb-bootstrap/skills (27 카테고리 + wvb 통째) → 이중 wvb 경로
+#   - 원본: [ ! -d ${SKILLS_DST} ] → Volume 옛 디렉토리 있으면 skip = skill 변경 미반영
+#   - fix: SKILLS_SRC=wvb 하위만 + force sync (매번 최신 copy)
 # -----------------------------------------------------------------------------
-SKILLS_SRC="/opt/wvb-bootstrap/skills"
+SKILLS_SRC="/opt/wvb-bootstrap/skills/wvb"
 SKILLS_DST="${DATA_DIR}/skills/wvb"
 
-if [ -d "${SKILLS_SRC}" ] && [ ! -d "${SKILLS_DST}" ]; then
-    log "Copying WVB skills to ${SKILLS_DST}"
+if [ -d "${SKILLS_SRC}" ]; then
+    log "Force syncing WVB skills: ${SKILLS_SRC} → ${SKILLS_DST}"
     mkdir -p "${SKILLS_DST}"
     cp -r "${SKILLS_SRC}"/* "${SKILLS_DST}/" 2>/dev/null || true
+    log "WVB skills synced: $(ls -1 "${SKILLS_DST}" 2>/dev/null | wc -l) skills"
 fi
 
 # -----------------------------------------------------------------------------
