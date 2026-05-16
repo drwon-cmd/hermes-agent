@@ -66,8 +66,6 @@ platform_toolsets:
     - web         # web_search (Tavily) + web_extract
     - skills      # WVB skill 6개 사용
     - file        # 파일 접근
-    - vision      # 이미지 분석
-    - tts         # 음성 출력
     - todo        # 작업 추적
     - cronjob     # 일정 자동화
     - send_message  # 텔레그램 응답 (공식 키: hermes-telegram preset 명시)
@@ -76,6 +74,9 @@ platform_toolsets:
                   # Hermes user + 컨테이너 격리 + Volume /opt/data 한정으로 안전
     # browser 제외 (Chrome 없어서 fail)
     # image_gen 제외 (Phase 1 미사용)
+    # 2026-05-16 22:30 Option B: vision/tts 제외 — 사용 빈도 낮음, token 절감 (~15-20K)
+    # vision: 이미지 분석 — 필요 시 재추가 가능
+    # tts: 음성 출력 — 텔레그램은 텍스트 위주, TTS 사용 케이스 거의 없음
 
 # -----------------------------------------------------------------------------
 # Web Search Backend — Tavily 명시 (자동 감지 보강)
@@ -94,6 +95,19 @@ web:
 telegram:
   require_mention: false
   reactions: true
+
+# -----------------------------------------------------------------------------
+# Session Reset (Telegram conversation context 누적 차단)
+# -----------------------------------------------------------------------------
+# 2026-05-16 22:30 Option A: idle_minutes 1440 (24h) → 360 (6h)
+# Hermes cli-config.yaml.example L504-507 schema. default 24h는 비서 대화에 길음 —
+# context 누적으로 token 폭증, 429 잦은 hit. 6h 후 idle reset으로 fresh context.
+# session reset 시 봇이 memory에 중요 정보 save 후 context wipe (memory는 영구 보존).
+# -----------------------------------------------------------------------------
+session_reset:
+  mode: both
+  idle_minutes: 360   # 6시간 idle 후 reset
+  at_hour: 4          # 매일 04:00 SGT reset
 
 # -----------------------------------------------------------------------------
 # Timezone (cron + log 일관성)
@@ -147,7 +161,13 @@ mcp_servers:
       # Scope (mail+calendar+files) = 사용자가 인증한 Mail.Read/Send + Calendars.Read +
       # Files.Read.All 권한과 정확히 매칭.
       - --preset
-      - mail,calendar,files
+      # 2026-05-16 22:30 Option C: preset 더 축소 (calendar,files 제외)
+      # 이유: 매 호출 ms365 tools schema가 system prompt 50-80K 점유 → 429 잦음
+      # 효과: mail만 활성화 → tools ~30개 → 15개로 축소, ~25-40K 절감
+      # Trade-off: Outlook 일정 (M2) + OneDrive 검색 (M3) 비활성화. 필요 시 즉시 재추가:
+      #   변경: "mail" → "mail,calendar" 또는 "mail,calendar,files"
+      # 사용자가 calendar/files 사용 빈도 보고 재조정 결정
+      - mail
       - --org-mode  # work account (drwon@wiltvb.com) 지원
     env:
       MS365_MCP_CLIENT_ID: ${MS365_MCP_CLIENT_ID}
