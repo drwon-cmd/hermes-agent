@@ -195,6 +195,9 @@ log "Step 4 (secret grep) temporarily disabled — see Phase 1.5 task #21"
 #   MS365_MCP_SELECTED_ACCOUNT_PATH=/opt/data/.ms365/selected-account.json
 # 디렉토리 미리 생성 + hermes user 소유 (uv venv와 동일 패턴, build-then-verify §8)
 MS365_DIR="${DATA_DIR}/.ms365"
+MS365_TOKEN_FILE="${MS365_DIR}/token-cache.json"
+MS365_ACCOUNT_FILE="${MS365_DIR}/selected-account.json"
+
 if ! mkdir -p "${MS365_DIR}" 2>&1; then
     log "WARNING: mkdir ${MS365_DIR} failed — MS 365 OAuth token caching unavailable"
 else
@@ -202,6 +205,55 @@ else
     chmod 700 "${MS365_DIR}" 2>/dev/null || true
     log "MS365 token cache dir ready: ${MS365_DIR}"
 fi
+
+# 2026-05-16 18:30 fix (Plan v1.5 RCA): token path 글로벌 export 의무
+# 원인: config.yaml mcp_servers.ms365.env 안의 MS365_MCP_TOKEN_CACHE_PATH는
+#       Hermes-spawned subprocess에만 적용. 사용자가 terminal로 --login 직접 실행 시
+#       그 instance는 글로벌 envvar만 받음 → softeria default 경로에 token 저장 →
+#       Hermes-spawned subprocess는 우리 지정 경로에서 찾아 'no accounts' 응답.
+# Fix: 모든 subprocess (mcp_servers + terminal + 봇 임의 실행)가 같은 경로 공유.
+export MS365_MCP_TOKEN_CACHE_PATH="${MS365_TOKEN_FILE}"
+export MS365_MCP_SELECTED_ACCOUNT_PATH="${MS365_ACCOUNT_FILE}"
+log "MS365 token path exported globally: ${MS365_TOKEN_FILE}"
+
+# 봇이 임의로 만들었을 수 있는 ~/.hermes/config.yaml + ~/.config/ms365-mcp/* 정리
+# 또는 default 경로의 token을 우리 지정 경로로 migrate
+DEFAULT_TOKEN_PATHS=(
+    "/opt/data/.config/ms365-mcp/.token-cache.json"
+    "/root/.config/ms365-mcp/.token-cache.json"
+    "/home/hermes/.config/ms365-mcp/.token-cache.json"
+    "/opt/data/.hermes/config.yaml"  # 봇 임의 config 흔적
+    "/root/.hermes/config.yaml"
+)
+for p in "${DEFAULT_TOKEN_PATHS[@]}"; do
+    if [ -f "$p" ]; then
+        case "$p" in
+            *token-cache.json)
+                if [ ! -f "${MS365_TOKEN_FILE}" ]; then
+                    log "MIGRATING token from $p → ${MS365_TOKEN_FILE}"
+                    cp "$p" "${MS365_TOKEN_FILE}" 2>&1 || log "  copy failed (non-fatal)"
+                    chown hermes:hermes "${MS365_TOKEN_FILE}" 2>/dev/null || true
+                    chmod 600 "${MS365_TOKEN_FILE}" 2>/dev/null || true
+                else
+                    log "  existing token at ${MS365_TOKEN_FILE}, skipping migration from $p"
+                fi
+                ;;
+            *config.yaml)
+                log "Removing bot-created stray config: $p"
+                rm -f "$p" 2>&1 || true
+                ;;
+        esac
+    fi
+done
+
+# 봇이 spawn했을 수 있는 stray ms-365-mcp-server background processes 정리
+# Hermes가 config.yaml mcp_servers.ms365 통해 자동 관리하는 것이 표준
+if pgrep -f "ms-365-mcp-server" >/dev/null 2>&1; then
+    log "Killing stray ms-365-mcp-server processes (Hermes will respawn via mcp_servers config)"
+    pkill -f "ms-365-mcp-server" 2>/dev/null || true
+    sleep 1
+fi
+log "MS365 boot cleanup complete"
 
 # softeria binary 검증 (Dockerfile에서 npm install -g 됐는지)
 if command -v ms-365-mcp-server >/dev/null 2>&1; then
@@ -320,6 +372,16 @@ elif [ ! -f "${MEMORY_FILE}" ] || [ "${HERMES_FORCE_MEMORY_REGEN:-false}" = "tru
   are PRE-INSTALLED at boot by entrypoint.sh Step 4.5 — setup.py --check should succeed
   without invoking --install-deps. If setup.py errors out on pip, re-run setup without
   --install-deps.
+
+## MS 365 (ms-365-mcp-server) Rules — Phase 6b
+- ms-365-mcp-server is REGISTERED in Hermes config.yaml mcp_servers.ms365 (stdio mode)
+- DO NOT start ms-365-mcp-server as a standalone background process — Hermes auto-spawns it
+- DO NOT modify ~/.hermes/config.yaml or create new config files — main config is /opt/data/config.yaml
+- DO NOT try HTTP mode (--http) — stdio mode is the correct integration
+- Token cache: /opt/data/.ms365/token-cache.json (persistent Volume)
+- OAuth token is already saved (user authenticated successfully)
+- If "no accounts" error: token path mismatch issue, likely needs Hermes restart, NOT new login
+- Use mcp_ms365_* tools directly (auto-registered by Hermes), do not run ms-365-mcp-server CLI
 
 ## Skill Sources
 - WVB domain skills: /opt/data/skills/wvb/* (synced from image at every boot)
