@@ -73,9 +73,12 @@ RUN chmod +x /opt/wvb-bootstrap/entrypoint.sh /opt/wvb-bootstrap/healthcheck.sh
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD /opt/wvb-bootstrap/healthcheck.sh || exit 1
 
-# 공식 base image 검증 (2026-05-15): hermes user UID 10000 사전 생성 (Hermes 공식 Dockerfile L28)
-# cto-lead 3번째 실수 fix: 'node' 가정 → 실제 'hermes' (https://raw.githubusercontent.com/NousResearch/hermes-agent/main/Dockerfile L104)
-USER hermes
+# 2026-05-16 fix (cto-lead 15번째 실수 + Volume permission):
+#   - USER hermes 명시 → Railway Volume이 root 소유로 mount → /opt/data write Permission denied
+#   - Hermes 공식 패턴: USER root로 시작 → /opt/hermes/docker/entrypoint.sh가 gosu로 hermes drop
+#   - 공식 Dockerfile L104: USER root (Volume mount 후 권한 처리 위해)
+#   - wvb-entrypoint.sh가 root로 시작 → /opt/data write OK → 공식 entrypoint chain → hermes drop
+# USER hermes  ← 제거 (root 유지)
 
 # -----------------------------------------------------------------------------
 # Gateway run + Telegram polling
