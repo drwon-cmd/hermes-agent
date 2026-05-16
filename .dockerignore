@@ -63,8 +63,11 @@ tmp/
 
 # 문서 (Railway 런타임 불필요)
 docs/
+# 문서 *.md 차단 (Railway 런타임 불필요) — 단 Hermes skill 정의는 보존
 *.md
 !README.md
+!skills/**/*.md
+!**/SKILL.md
 LICENSE
 CHANGELOG.md
 
