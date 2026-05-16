@@ -72,6 +72,8 @@ SKILLS_DST="${DATA_DIR}/skills/wvb"
 
 if [ -d "${SKILLS_SRC}" ]; then
     log "Force syncing WVB skills: ${SKILLS_SRC} → ${SKILLS_DST}"
+    # 2026-05-16 fix: 옛 카테고리 잔여물 제거 (32→6 skills 정리)
+    rm -rf "${SKILLS_DST}"
     mkdir -p "${SKILLS_DST}"
     cp -r "${SKILLS_SRC}"/* "${SKILLS_DST}/" 2>/dev/null || true
     log "WVB skills synced: $(ls -1 "${SKILLS_DST}" 2>/dev/null | wc -l) skills"

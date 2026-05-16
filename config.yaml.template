@@ -56,6 +56,26 @@ platforms:
     guest_mode: false
 
 # -----------------------------------------------------------------------------
+# Platform Toolsets — telegram 도구 명시 (browser 제외, web_search 활성)
+# 2026-05-16 fix: 기본 preset 'hermes-telegram'은 browser 포함 → Chrome 없어서 fail
+#   LLM이 browser_navigate 우선 선택 + Chrome 없음 에러
+#   해결: browser 제외 + web (Tavily web_search) 유지 → LLM이 web_search 사용
+# -----------------------------------------------------------------------------
+platform_toolsets:
+  telegram:
+    - web         # web_search (Tavily) + web_extract
+    - skills      # WVB skill 6개 사용
+    - file        # 파일 접근
+    - vision      # 이미지 분석
+    - tts         # 음성 출력
+    - todo        # 작업 추적
+    - cronjob     # 일정 자동화
+    - messaging   # 텔레그램 응답
+    # browser 제외 (Chrome 없어서 fail)
+    # terminal 제외 (Phase 1 보안 — 외부 명령 실행 차단)
+    # image_gen 제외 (Phase 1 미사용)
+
+# -----------------------------------------------------------------------------
 # Telegram top-level
 # -----------------------------------------------------------------------------
 telegram:
