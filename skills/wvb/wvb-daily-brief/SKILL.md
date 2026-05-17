@@ -1,12 +1,12 @@
 ---
 name: wvb-daily-brief
-description: 원대로 대표 매일 06:00 KST 일일 브리핑 — 오늘 일정·biz list 변경·미수신 메시지·우선순위 P0. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
-version: 1.0.0
+description: 원대로 대표 매일 KST 06:00 일일 브리핑 — 오늘 일정·미수신 메시지·P0 의사결정. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
+version: 2.0.0
 metadata:
   tags: [wvb, daily, brief, executive, cron]
   domain: wvb
-  cron: "0 6 * * *"
-  timezone: "Asia/Singapore"
+  cron: "0 21 * * *"
+  timezone: "Asia/Seoul"
   trigger_keywords:
     - 일일 브리핑
     - 오늘 브리핑
@@ -15,72 +15,152 @@ metadata:
     - /brief
 ---
 
-# WVB Daily Brief (06:00 KST)
+# WVB Daily Brief (KST 06:00)
 
 ## When to Use
 
-- **자동 트리거**: 매일 06:00 KST cron (config.yaml의 cron 섹션, Phase 1.5에서 활성)
+- **자동 트리거**: 매일 KST 06:00 cron (UTC 21:00, schedule `0 21 * * *`)
 - **수동 트리거**: 사용자가 `/brief` 또는 "일일 브리핑" / "오늘 일정 정리" 자연어 호출
 
-## Quick Reference (Phase 1 출력 형식)
+## Required Skills (cron 생성 시 함께 preload 필수)
+
+본 스킬 단독으로는 작동 못 함. cron `skills` 배열에 다음을 반드시 포함:
 
 ```
-📋 WVB Daily Brief — 2026-05-16 (금)
+skills: ['wvb-daily-brief', 'wvb-wiki-lookup', 'google-workspace']
+```
+
+추가로 다음 MCP 도구는 Hermes에 자동 등록되어 있어 별도 preload 불필요:
+- `mcp_ms365_*` — Outlook mail (List/Search). 단 현재 `--preset mail`만 활성이라 Outlook Calendar/OneDrive는 미활성
+
+## Output Format
+
+```
+📋 WVB Daily Brief — {YYYY-MM-DD} ({요일})
 
 🕐 오늘 일정 (KST)
-  - 10:00 미팅 X (장소·자료 준비 상태)
-  - 14:00 콜 Y
-  - 17:00 biz list 리뷰
+  - {Google Calendar 결과 — 없으면 "(0건)"}
 
 📊 Biz List 변화 (어제 → 오늘)
-  - 신규 진입: 2건
-  - Won: 1건
-  - At Risk: 3건 → 후속 액션 필요
+  - {Google Sheets biz list 통합은 별도 phase — 현재 "biz list Sheets 통합 미적용" 표시}
 
 📬 미수신 (24h)
-  - Slack #80-zero100: 5개 (긴급 표시 1)
-  - Gmail: 12개 (P0 분류 2)
-  - 카톡 업무: 정리 필요 (Phase 1.5 자동화)
+  - Gmail unread: {N건, 발신자 + subject 한 줄}
+  - Outlook unread: {N건, 발신자 + subject 한 줄}
+  - Slack #80-zero100: 미통합 (Phase 1.5)
+  - 카톡 업무: 미통합 (Phase 1.5)
 
 🚨 P0 의사결정 대기
-  - {wiki/decisions 검색 결과}
+  - {wiki/decisions/ 조회 결과 — 최근 P0 pending}
 
 💡 오늘의 권장 초점
-  - {AI 종합 1줄}
+  - {위 정보 종합 1-2줄}
 ```
 
 ## Procedure
 
-### Phase 1 (현재) — 부분 가동
-1. **wiki/decisions/ 조회** — P0 pending 의사결정 list (wvb-wiki-lookup skill 호출)
-2. **wiki/events/weekly/ 최근 리포트** — 진행 중 큰 작업 컨텍스트
-3. **사용자에게 정직히 알림**: "Google Calendar·Gmail·Slack·biz list 통합은 Phase 6에서 활성화 예정. 현재는 wiki 기반 컨텍스트만 제공"
+### Step 1: 정확한 날짜·요일 확보 (필수, prior knowledge 금지)
 
-### Phase 6 (Google APIs 통합 후) — 완전 가동
-1. Google Calendar 조회 (`google_calendar_list_events` 도구) — 오늘 일정
-2. Gmail unread search (`google_gmail_search` 도구, 라벨 `INBOX is:unread`) — 24h 미수신
-3. Google Sheets biz list 비교 (어제 vs 오늘 snapshot) — 변화 추출
-4. Slack `#80-zero100` 채널 unread (Phase 1.5에서 Slack 통합 후)
-5. wiki/decisions/ 조회 — P0 pending (wvb-wiki-lookup)
-6. 위 정보 종합 → Quick Reference 형식으로 출력
+**terminal 도구로 다음 명령을 반드시 실행한 후 결과를 사용하라:**
+
+```bash
+TZ='Asia/Seoul' date '+%Y-%m-%d %A (%a)'
+```
+
+예상 출력: `2026-05-17 일요일 (일)`
+
+**금지 규칙**:
+- 위 명령 실행 없이 prior knowledge로 요일 추측 ❌
+- "2026-05-17이라면 금요일일 것" 같은 추론 ❌
+- 반드시 date 명령 실제 호출 → 출력 그대로 인용 ✅
+
+### Step 2: Google Calendar 오늘 일정 조회
+
+terminal 도구로 google-workspace skill의 google_api.py 호출:
+
+```bash
+python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
+    calendar list --max-results 20 \
+    --time-min "$(TZ='Asia/Seoul' date '+%Y-%m-%dT00:00:00+09:00')" \
+    --time-max "$(TZ='Asia/Seoul' date '+%Y-%m-%dT23:59:59+09:00')"
+```
+
+도구 호출 실패 시 (OAuth 미인증 / 명령 오류) 출력 형식에 "(Google Calendar 호출 실패: {에러})" 명시.
+
+### Step 3: Gmail 미수신 조회 (최근 24시간)
+
+```bash
+python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
+    gmail search --query "is:unread newer_than:1d" --max-results 10
+```
+
+발신자 + Subject 1줄로 요약. 본문 인용 금지.
+
+### Step 4: Outlook 미수신 조회
+
+mcp_ms365 도구 호출 (자동 등록):
+
+```
+mcp_ms365_list_mail_messages 또는 mcp_ms365_search_messages
+filter: "isRead eq false"
+top: 10
+select: "from,subject,receivedDateTime"
+```
+
+### Step 5: WVB Wiki P0 의사결정 조회
+
+terminal 도구로 wiki/decisions 폴더 list (최신 5개):
+
+```bash
+ls -t /opt/data/wiki/wiki/decisions/*.md 2>/dev/null | head -5
+```
+
+각 파일 첫 30줄 read 후 "P0" 또는 "pending" 마커 있는 항목 추출:
+
+```bash
+for f in $(ls -t /opt/data/wiki/wiki/decisions/*.md 2>/dev/null | head -10); do
+    echo "=== $f ==="
+    head -30 "$f"
+done
+```
+
+또는 wvb-wiki-lookup skill의 절차를 사용해도 됨 (이미 cron skills에 preload 됐다면).
+
+### Step 6: 종합 출력
+
+위 정보 종합 후 Output Format 그대로 출력.
+
+**Graceful degradation 원칙**:
+- 도구 호출 실패한 영역은 "(호출 실패: {1줄 이유})" 명시
+- 데이터 없는 영역 (예: 오늘 일정 없음)은 "(0건)" 명시
+- 한 영역 실패해도 다른 영역은 계속 진행
 
 ## Pitfalls
 
-- ❌ Phase 1에서 "오늘 일정" 거짓 응답 금지 — Google Calendar 미통합 명시
-- ❌ 메일 본문 그대로 인용 금지 — 발신자 + 한 줄 요약만
+- ❌ **Step 1 date 명령 없이 요일 추측 금지** (2026-05-17 v2.0 fix 사고 RCA)
+- ❌ **wiki/decisions/ 실제 read 없이 "어렵습니다" 환각 금지** (v2.0 fix)
+- ❌ 메일 본문 그대로 인용 금지 — 발신자 + Subject 한 줄 요약만
 - ❌ 미수신 메시지를 *읽음 처리* 시도 금지 (read-only)
-- ❌ Slack 자동 응답 금지 (CCO 외부 발신 게이트)
+- ❌ **외부 발신 (Gmail send / Outlook send / Slack send) 0건** — CCO 게이트
 - ❌ biz list 자동 수정 금지 (read-only consumer)
+- ❌ `wiki/_personal/`, `SOUL.md`, `USER.md`, `ACCESS_POLICY.md`, `HEARTBEAT.md` 접근 금지 (Personal Data Protection)
+- ❌ Gemini 환각 패턴: `default_api.x()` Python code execution 형식 금지 — Hermes는 자연어 + 자율 tool 호출
 
-## Verification
+## Verification (응답 전 자기 점검)
 
-1. wiki/decisions/ 실제 Read 했는가?
-2. Phase 6 미통합 영역을 정직히 명시했는가?
-3. 외부 발신 0건인가?
-4. 응답 분량 800자 이내 (텔레그램 가독성)?
+1. **Step 1 date 명령 실제 실행했는가?** 출력 라인 인용 가능?
+2. Step 2-4 중 **최소 2개 도구 호출 실제 시도**했는가? (성공/실패 무관)
+3. **Step 5 wiki/decisions/ 실제 read** 했는가? 파일 path 인용 가능?
+4. 외부 발신 0건인가?
+5. 응답 분량 1500자 이내 (텔레그램 가독성)?
+6. Personal Data 영역 (`_personal`, SOUL 등) 누수 없는가?
 
 ## References
 
-- Plan §3.4 채널 정책 (`docs/planning/01-plan/features/hermes-agent-deployment.plan.md`)
-- 데이터 소스 제외 룰 (`memory/feedback_data_source_exclusions.md`)
-- CCO 외부 발신 게이트 (Plan §7)
+- Phase 6 완료 기록: `docs/planning/01-plan/features/hermes-google-mcp.plan.md` v1.5 (2026-05-16)
+- Plan §3.4 채널 정책: `docs/planning/01-plan/features/hermes-agent-deployment.plan.md`
+- google-workspace skill: `/opt/data/skills/productivity/google-workspace/SKILL.md`
+- ms365 MCP 활성 도구: `mcp_servers.ms365 --preset mail` (Outlook mail만, Calendar/Files 비활성)
+- 데이터 소스 제외 룰: `memory/feedback_data_source_exclusions.md`
+- CCO 외부 발신 게이트: Plan §7
+- Personal Data Protection: `.claude/rules/personal-data-protection.md`
