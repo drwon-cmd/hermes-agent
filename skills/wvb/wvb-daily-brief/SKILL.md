@@ -1,7 +1,7 @@
 ---
 name: wvb-daily-brief
-description: 원대로 대표 매일 KST 06:00 일일 브리핑 — 오늘 일정·미수신 메시지·P0 의사결정. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
-version: 2.0.0
+description: 원대로 대표 매일 KST 06:00 일일 브리핑 — 오늘 일정·미수신 메시지·권장 초점. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
+version: 2.1.0
 metadata:
   tags: [wvb, daily, brief, executive, cron]
   domain: wvb
@@ -27,7 +27,7 @@ metadata:
 본 스킬 단독으로는 작동 못 함. cron `skills` 배열에 다음을 반드시 포함:
 
 ```
-skills: ['wvb-daily-brief', 'wvb-wiki-lookup', 'google-workspace']
+skills: ['wvb-daily-brief', 'google-workspace']
 ```
 
 추가로 다음 MCP 도구는 Hermes에 자동 등록되어 있어 별도 preload 불필요:
@@ -41,21 +41,19 @@ skills: ['wvb-daily-brief', 'wvb-wiki-lookup', 'google-workspace']
 🕐 오늘 일정 (KST)
   - {Google Calendar 결과 — 없으면 "(0건)"}
 
-📊 Biz List 변화 (어제 → 오늘)
-  - {Google Sheets biz list 통합은 별도 phase — 현재 "biz list Sheets 통합 미적용" 표시}
-
 📬 미수신 (24h)
   - Gmail unread: {N건, 발신자 + subject 한 줄}
   - Outlook unread: {N건, 발신자 + subject 한 줄}
   - Slack #80-zero100: 미통합 (Phase 1.5)
   - 카톡 업무: 미통합 (Phase 1.5)
 
-🚨 P0 의사결정 대기
-  - {wiki/decisions/ 조회 결과 — 최근 P0 pending}
-
 💡 오늘의 권장 초점
   - {위 정보 종합 1-2줄}
 ```
+
+**제거된 섹션** (v2.1 사용자 결정 2026-05-17):
+- ~~Biz List 변화~~: biz list Sheets를 사용 안 함
+- ~~P0 의사결정 대기~~: wiki/decisions/ 파일 list가 사용자에게 무용
 
 ## Procedure
 
@@ -107,28 +105,9 @@ top: 10
 select: "from,subject,receivedDateTime"
 ```
 
-### Step 5: WVB Wiki P0 의사결정 조회
+### Step 5: 종합 출력
 
-terminal 도구로 wiki/decisions 폴더 list (최신 5개):
-
-```bash
-ls -t /opt/data/wiki/wiki/decisions/*.md 2>/dev/null | head -5
-```
-
-각 파일 첫 30줄 read 후 "P0" 또는 "pending" 마커 있는 항목 추출:
-
-```bash
-for f in $(ls -t /opt/data/wiki/wiki/decisions/*.md 2>/dev/null | head -10); do
-    echo "=== $f ==="
-    head -30 "$f"
-done
-```
-
-또는 wvb-wiki-lookup skill의 절차를 사용해도 됨 (이미 cron skills에 preload 됐다면).
-
-### Step 6: 종합 출력
-
-위 정보 종합 후 Output Format 그대로 출력.
+위 Step 1-4 결과를 Output Format 그대로 출력. 권장 초점은 일정 + 미수신 종합하여 1-2줄로 작성.
 
 **Graceful degradation 원칙**:
 - 도구 호출 실패한 영역은 "(호출 실패: {1줄 이유})" 명시
@@ -150,10 +129,9 @@ done
 
 1. **Step 1 date 명령 실제 실행했는가?** 출력 라인 인용 가능?
 2. Step 2-4 중 **최소 2개 도구 호출 실제 시도**했는가? (성공/실패 무관)
-3. **Step 5 wiki/decisions/ 실제 read** 했는가? 파일 path 인용 가능?
-4. 외부 발신 0건인가?
-5. 응답 분량 1500자 이내 (텔레그램 가독성)?
-6. Personal Data 영역 (`_personal`, SOUL 등) 누수 없는가?
+3. 외부 발신 0건인가?
+4. 응답 분량 1500자 이내 (텔레그램 가독성)?
+5. Personal Data 영역 (`_personal`, SOUL 등) 누수 없는가?
 
 ## References
 
