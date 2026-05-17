@@ -47,8 +47,27 @@ log "=== End boot diagnostic ==="
 # - envsubst 명령어 존재 확인 (gettext-base 없으면 fail-fast)
 # - envsubst 결과 검증 (빈 파일이면 재시도 또는 fail)
 # - HERMES_FORCE_CONFIG_REGEN=true 시 옛 config 무시하고 강제 재생성 (template 변경 즉시 반영)
+#
+# 2026-05-17 추가 (재발 방지 patch, wvb-daily-brief 미인식 사고 RCA):
+# - template 변경 후 사용자가 HERMES_FORCE_CONFIG_REGEN 수동 설정 잊으면 Volume의 옛
+#   config.yaml이 살아남아 새 external_dirs·skills 추가 누락. wvb 스킬 6개 미인식.
+# - sha256 hash 비교로 template 변경 자동 감지 → 자동 regenerate.
+TEMPLATE_HASH_FILE="${DATA_DIR}/.config.template.hash"
+TEMPLATE_HASH_CURRENT=""
+TEMPLATE_HASH_STORED=""
+if command -v sha256sum >/dev/null 2>&1 && [ -f "${TEMPLATE_FILE}" ]; then
+    TEMPLATE_HASH_CURRENT=$(sha256sum "${TEMPLATE_FILE}" | cut -d' ' -f1)
+    if [ -f "${TEMPLATE_HASH_FILE}" ]; then
+        TEMPLATE_HASH_STORED=$(cat "${TEMPLATE_HASH_FILE}" 2>/dev/null || echo "")
+    fi
+    if [ -n "${TEMPLATE_HASH_CURRENT}" ] && [ "${TEMPLATE_HASH_CURRENT}" != "${TEMPLATE_HASH_STORED}" ]; then
+        log "config.yaml.template hash changed (${TEMPLATE_HASH_STORED:0:12} → ${TEMPLATE_HASH_CURRENT:0:12}), auto-forcing regenerate"
+        HERMES_FORCE_CONFIG_REGEN="true"
+    fi
+fi
+
 if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ] || [ "${HERMES_FORCE_CONFIG_REGEN:-false}" = "true" ]; then
-    log "config.yaml regenerate (missing/empty or HERMES_FORCE_CONFIG_REGEN=true)"
+    log "config.yaml regenerate (missing/empty or HERMES_FORCE_CONFIG_REGEN=true or template hash changed)"
 
     # envsubst 명령 존재 확인 (Dockerfile gettext-base 누락 시 명확한 에러)
     if ! command -v envsubst >/dev/null 2>&1; then
@@ -78,6 +97,13 @@ if [ ! -f "${CONFIG_FILE}" ] || [ ! -s "${CONFIG_FILE}" ] || [ "${HERMES_FORCE_C
     fi
     mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"
     log "config.yaml written: ${CONFIG_FILE} ($(wc -l < "${CONFIG_FILE}") lines)"
+
+    # 2026-05-17 추가: regenerate 성공 후 template hash 저장 → 다음 부팅 시 비교 기준
+    if [ -n "${TEMPLATE_HASH_CURRENT}" ]; then
+        echo "${TEMPLATE_HASH_CURRENT}" > "${TEMPLATE_HASH_FILE}" 2>/dev/null \
+            && log "template hash saved: ${TEMPLATE_HASH_CURRENT:0:12} → ${TEMPLATE_HASH_FILE}" \
+            || log "WARNING: failed to save template hash (non-fatal)"
+    fi
 else
     log "config.yaml exists ($(wc -l < "${CONFIG_FILE}") lines), skipping bootstrap"
 fi
