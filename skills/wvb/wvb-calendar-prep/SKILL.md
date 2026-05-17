@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   tags: [wvb, calendar, prep, evening, cron]
   domain: wvb
-  cron: "0 21 * * *"
+  cron: "0 20 * * *"
   timezone: "Asia/Singapore"
   trigger_keywords:
     - 내일 일정

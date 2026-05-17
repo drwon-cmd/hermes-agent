@@ -5,8 +5,8 @@ version: 2.1.0
 metadata:
   tags: [wvb, daily, brief, executive, cron]
   domain: wvb
-  cron: "0 21 * * *"
-  timezone: "Asia/Seoul"
+  cron: "0 5 * * *"
+  timezone: "Asia/Singapore"
   trigger_keywords:
     - 일일 브리핑
     - 오늘 브리핑
@@ -19,7 +19,7 @@ metadata:
 
 ## When to Use
 
-- **자동 트리거**: 매일 KST 06:00 cron (UTC 21:00, schedule `0 21 * * *`)
+- **자동 트리거**: 매일 KST 06:00 cron (컨테이너 TZ=Asia/Singapore → SGT 05:00, schedule `0 5 * * *`). 2026-05-17 정정: 이전 `0 21 * * *`는 작성자가 UTC 해석을 가정했으나 Hermes는 컨테이너 TZ로 cron parse — SGT 21:00 = KST 22:00 잘못 fire.
 - **수동 트리거**: 사용자가 `/brief` 또는 "일일 브리핑" / "오늘 일정 정리" 자연어 호출
 
 ## Required Skills (cron 생성 시 함께 preload 필수)
