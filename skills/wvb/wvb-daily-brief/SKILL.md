@@ -1,7 +1,7 @@
 ---
 name: wvb-daily-brief
 description: 원대로 대표 매일 KST 06:00 일일 브리핑 — 오늘 일정·미수신 메시지·권장 초점. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
-version: 2.1.0
+version: 2.1.1
 metadata:
   tags: [wvb, daily, brief, executive, cron]
   domain: wvb
@@ -77,18 +77,20 @@ TZ='Asia/Seoul' date '+%Y-%m-%d %A (%a)'
 terminal 도구로 google-workspace skill의 google_api.py 호출:
 
 ```bash
-python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
+/opt/hermes/.venv/bin/python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
     calendar list --max-results 20 \
     --time-min "$(TZ='Asia/Seoul' date '+%Y-%m-%dT00:00:00+09:00')" \
     --time-max "$(TZ='Asia/Seoul' date '+%Y-%m-%dT23:59:59+09:00')"
 ```
+
+**Python 인터프리터 주의**: bare `python` 명령은 cron이 spawn한 서브프로세스 PATH에 없음. 반드시 절대경로 `/opt/hermes/.venv/bin/python` 사용 (Hermes Runtime Facts §Execution Environment).
 
 도구 호출 실패 시 (OAuth 미인증 / 명령 오류) 출력 형식에 "(Google Calendar 호출 실패: {에러})" 명시.
 
 ### Step 3: Gmail 미수신 조회 (최근 24시간)
 
 ```bash
-python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
+/opt/hermes/.venv/bin/python "${HERMES_HOME:-/opt/data}/skills/productivity/google-workspace/scripts/google_api.py" \
     gmail search --query "is:unread newer_than:1d" --max-results 10
 ```
 
@@ -124,6 +126,7 @@ select: "from,subject,receivedDateTime"
 - ❌ biz list 자동 수정 금지 (read-only consumer)
 - ❌ `wiki/_personal/`, `SOUL.md`, `USER.md`, `ACCESS_POLICY.md`, `HEARTBEAT.md` 접근 금지 (Personal Data Protection)
 - ❌ Gemini 환각 패턴: `default_api.x()` Python code execution 형식 금지 — Hermes는 자연어 + 자율 tool 호출
+- ❌ **bare `python` 명령 금지** (2026-05-18 cron RCA): cron이 spawn한 tool 서브프로세스 PATH에 venv 미포함 → "python 명령어를 찾을 수 없음" 실패. 반드시 절대경로 `/opt/hermes/.venv/bin/python` 사용
 
 ## Verification (응답 전 자기 점검)
 
