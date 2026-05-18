@@ -4403,6 +4403,28 @@ class TelegramAdapter(BasePlatformAdapter):
                     await self.handle_message(event)
                     return
 
+                # 2026-05-19 WVB fix: audio document fallback
+                # Telegram이 m4a/aac/flac/wav 등을 document로 분류할 수 있음
+                # ("파일" 카테고리에서 첨부 시). msg.audio 처리와 동일 라우팅.
+                # transcription_tools.py SUPPORTED_FORMATS 와 정렬.
+                _wvb_audio_doc_types = {
+                    ".mp3": "audio/mp3", ".m4a": "audio/m4a", ".ogg": "audio/ogg",
+                    ".wav": "audio/wav", ".flac": "audio/flac", ".aac": "audio/aac",
+                    ".webm": "audio/webm", ".mp4": "audio/mp4",
+                    ".mpeg": "audio/mpeg", ".mpga": "audio/mpeg",
+                }
+                if ext in _wvb_audio_doc_types or (doc_mime and doc_mime.startswith("audio/")):
+                    file_obj = await doc.get_file()
+                    audio_bytes = await file_obj.download_as_bytearray()
+                    _resolved_ext = ext if ext in _wvb_audio_doc_types else ".mp3"
+                    cached_path = cache_audio_from_bytes(bytes(audio_bytes), ext=_resolved_ext)
+                    event.media_urls = [cached_path]
+                    event.media_types = [_wvb_audio_doc_types.get(_resolved_ext, doc_mime or "audio/mp3")]
+                    event.message_type = MessageType.AUDIO
+                    logger.info("[Telegram] Cached user audio-document at %s (ext=%s)", cached_path, _resolved_ext)
+                    await self.handle_message(event)
+                    return
+
                 # Check if supported
                 if ext not in SUPPORTED_DOCUMENT_TYPES:
                     supported_list = ", ".join(sorted(SUPPORTED_DOCUMENT_TYPES.keys()))
