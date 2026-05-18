@@ -64,6 +64,22 @@ RUN uv pip install --python /opt/hermes/.venv/bin/python --no-cache-dir \
     reportlab==4.5.1 \
     pypdf==6.11.0
 
+# 2026-05-19: WVB patch — Telegram msg.audio dynamic extension fix (upstream bug)
+# 원본 base image의 gateway/platforms/telegram.py L4276 msg.audio 핸들러가 모든
+# audio 파일을 .mp3로 강제 캐시 → m4a/aac/flac 첨부 시 Whisper API mime mismatch
+# 거부 발생. msg.video 패턴 차용해서 file_name/file_path에서 동적 ext 결정.
+#
+# 사고: 2026-05-19 ~01:00 SGT 사용자가 m4a 첨부 → "지원되는 오디오 파일 형식이
+#   아니어서" 봇 거부. wvb-meeting-memo skill의 STT 전사 0건.
+# Fix 방식: fork의 gateway/platforms/telegram.py를 base image의 동일 path에 overlay.
+# 검증: base image upgrade 시 telegram.py upstream 변경 확인 필요 (별도 task).
+COPY --chown=hermes:hermes gateway/platforms/telegram.py /tmp/wvb-telegram.py
+RUN PATCH_TARGET=$(/opt/hermes/.venv/bin/python -c "import gateway.platforms.telegram as t; print(t.__file__)") \
+    && [ -n "$PATCH_TARGET" ] && [ -f "$PATCH_TARGET" ] \
+    && cp /tmp/wvb-telegram.py "$PATCH_TARGET" \
+    && rm -f /tmp/wvb-telegram.py \
+    && echo "[wvb-patch] telegram.py overlayed at $PATCH_TARGET"
+
 # -----------------------------------------------------------------------------
 # 2026-05-18: hermes user .bash_profile + .profile 에 venv auto-activate 추가
 # -----------------------------------------------------------------------------

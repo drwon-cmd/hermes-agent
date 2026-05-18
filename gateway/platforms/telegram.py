@@ -4277,10 +4277,32 @@ class TelegramAdapter(BasePlatformAdapter):
             try:
                 file_obj = await msg.audio.get_file()
                 audio_bytes = await file_obj.download_as_bytearray()
-                cached_path = cache_audio_from_bytes(bytes(audio_bytes), ext=".mp3")
+                # 2026-05-19 WVB fix: dynamic audio extension (upstream bug)
+                # 원본은 모든 audio를 .mp3로 강제 캐시 → m4a/aac/flac 첨부 시
+                # Whisper API가 mime mismatch로 거부. msg.video 패턴 차용.
+                # transcription_tools.py SUPPORTED_FORMATS 와 정렬.
+                _audio_ext = ".mp3"  # fallback
+                _audio_name = getattr(msg.audio, "file_name", None) or ""
+                if _audio_name:
+                    _, _cand = os.path.splitext(_audio_name)
+                    _cand = _cand.lower()
+                    if _cand in {".mp3", ".m4a", ".ogg", ".wav", ".flac", ".aac", ".webm", ".mp4", ".mpeg", ".mpga"}:
+                        _audio_ext = _cand
+                if _audio_ext == ".mp3" and getattr(file_obj, "file_path", None):
+                    for _c in (".m4a", ".ogg", ".wav", ".flac", ".aac", ".webm", ".mp4", ".mpeg", ".mpga", ".mp3"):
+                        if file_obj.file_path.lower().endswith(_c):
+                            _audio_ext = _c
+                            break
+                _audio_mime_map = {
+                    ".mp3": "audio/mp3", ".m4a": "audio/m4a", ".ogg": "audio/ogg",
+                    ".wav": "audio/wav", ".flac": "audio/flac", ".aac": "audio/aac",
+                    ".webm": "audio/webm", ".mp4": "audio/mp4",
+                    ".mpeg": "audio/mpeg", ".mpga": "audio/mpeg",
+                }
+                cached_path = cache_audio_from_bytes(bytes(audio_bytes), ext=_audio_ext)
                 event.media_urls = [cached_path]
-                event.media_types = ["audio/mp3"]
-                logger.info("[Telegram] Cached user audio at %s", cached_path)
+                event.media_types = [_audio_mime_map.get(_audio_ext, "audio/mp3")]
+                logger.info("[Telegram] Cached user audio at %s (ext=%s)", cached_path, _audio_ext)
             except Exception as e:
                 logger.warning("[Telegram] Failed to cache audio: %s", e, exc_info=True)
 
