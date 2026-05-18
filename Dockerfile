@@ -28,10 +28,14 @@ USER root
 
 # 한국어 locale (한글 응답 안정성 - UTF-8 인코딩 보장)
 # 2026-05-16 추가: gettext-base (envsubst 명령 — cto-lead 6번째 실수 fix)
+# 2026-05-18 추가: fonts-noto-cjk — wvb-meeting-memo PDF 한국어 폰트 fallback
+#   reportlab CID HYGothic-Medium만으로도 동작하지만 TTF 우선 (가독성 ↑)
+#   Plan: docs/plans/2026-05-18-meeting-memo-from-voice.md §5
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     tzdata \
     gettext-base \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* \
     && echo "ko_KR.UTF-8 UTF-8" > /etc/locale.gen \
     && locale-gen \
@@ -44,6 +48,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # build-then-verify v1.7 §8 외부 의존 spot-check 통과
 RUN npm install -g @softeria/ms-365-mcp-server@0.108.0 \
     && npm cache clean --force
+
+# 2026-05-18: wvb-meeting-memo PDF 생성용 Python 의존성
+# - reportlab 4.5.1: Markdown → PDF 변환 (CID HYGothic-Medium 한국어 내장)
+# - pypdf 6.11.0: 생성된 PDF page count 추출 (Telegram caption용)
+# Plan: docs/plans/2026-05-18-meeting-memo-from-voice.md §5
+# Pypi fetch 검증 (2026-05-18): reportlab 4.5.1 (2026-05-12 release), pypdf 6.11.0 (2026-05-09)
+# uv venv path = /opt/hermes/.venv (Dockerfile L73 .bash_profile auto-activate)
+RUN /opt/hermes/.venv/bin/pip install --no-cache-dir \
+    reportlab==4.5.1 \
+    pypdf==6.11.0
 
 # -----------------------------------------------------------------------------
 # 2026-05-18: hermes user .bash_profile + .profile 에 venv auto-activate 추가

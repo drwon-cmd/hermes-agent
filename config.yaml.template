@@ -179,3 +179,20 @@ mcp_servers:
       MS365_MCP_MAX_TOP: "15"
     timeout: 180
     connect_timeout: 60
+
+# =============================================================================
+# STT (Speech-to-Text) — 음성 메시지 자동 전사
+# =============================================================================
+# 2026-05-18 추가: wvb-meeting-memo skill 활성화 — Telegram 음성 → 자동 전사
+# Plan: docs/plans/2026-05-18-meeting-memo-from-voice.md §4 사용자 결정 #2
+#   - provider: openai (사용자 선택, 한국어 정확도 우선)
+#   - model: whisper-1 ($0.006/분)
+#   - 비용 가드: skill 내부에서 사전 승인 prompt 강제 (skill SKILL.md Step 2)
+# 환경변수: OPENAI_API_KEY (Railway 등록 완료, 2026-05-18)
+# 검증: cli-config.yaml.example L810-822 schema
+# -----------------------------------------------------------------------------
+stt:
+  enabled: true
+  provider: openai
+  openai:
+    model: whisper-1
