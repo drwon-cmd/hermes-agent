@@ -4279,20 +4279,47 @@ class TelegramAdapter(BasePlatformAdapter):
                 audio_bytes = await file_obj.download_as_bytearray()
                 # 2026-05-19 WVB fix: dynamic audio extension (upstream bug)
                 # 원본은 모든 audio를 .mp3로 강제 캐시 → m4a/aac/flac 첨부 시
-                # Whisper API가 mime mismatch로 거부. msg.video 패턴 차용.
-                # transcription_tools.py SUPPORTED_FORMATS 와 정렬.
-                _audio_ext = ".mp3"  # fallback
+                # Whisper API가 file ext 보고 mime mismatch로 거부.
+                # Resolution priority: file_name ext → mime_type → file_path → magic bytes
+                _audio_ext = None
                 _audio_name = getattr(msg.audio, "file_name", None) or ""
+                _audio_mime = (getattr(msg.audio, "mime_type", None) or "").lower()
+                _AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".wav", ".flac", ".aac", ".webm", ".mp4", ".mpeg", ".mpga"}
+                _MIME_TO_EXT = {
+                    "audio/m4a": ".m4a", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
+                    "audio/aac": ".aac", "audio/x-aac": ".aac",
+                    "audio/ogg": ".ogg", "audio/x-ogg": ".ogg", "audio/oga": ".ogg",
+                    "audio/wav": ".wav", "audio/x-wav": ".wav",
+                    "audio/flac": ".flac", "audio/x-flac": ".flac",
+                    "audio/webm": ".webm",
+                    "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mpga": ".mp3",
+                }
                 if _audio_name:
                     _, _cand = os.path.splitext(_audio_name)
-                    _cand = _cand.lower()
-                    if _cand in {".mp3", ".m4a", ".ogg", ".wav", ".flac", ".aac", ".webm", ".mp4", ".mpeg", ".mpga"}:
-                        _audio_ext = _cand
-                if _audio_ext == ".mp3" and getattr(file_obj, "file_path", None):
+                    if _cand.lower() in _AUDIO_EXTS:
+                        _audio_ext = _cand.lower()
+                if not _audio_ext and _audio_mime:
+                    _audio_ext = _MIME_TO_EXT.get(_audio_mime)
+                if not _audio_ext and getattr(file_obj, "file_path", None):
                     for _c in (".m4a", ".ogg", ".wav", ".flac", ".aac", ".webm", ".mp4", ".mpeg", ".mpga", ".mp3"):
                         if file_obj.file_path.lower().endswith(_c):
                             _audio_ext = _c
                             break
+                if not _audio_ext:
+                    # Magic bytes detection (last resort)
+                    _hdr = bytes(audio_bytes[:12]) if audio_bytes else b""
+                    if _hdr[4:8] == b"ftyp":
+                        _audio_ext = ".m4a"  # MP4/M4A container
+                    elif _hdr[:3] == b"ID3" or _hdr[:2] == b"\xff\xfb" or _hdr[:2] == b"\xff\xf3":
+                        _audio_ext = ".mp3"
+                    elif _hdr[:4] == b"OggS":
+                        _audio_ext = ".ogg"
+                    elif _hdr[:4] == b"RIFF":
+                        _audio_ext = ".wav"
+                    elif _hdr[:4] == b"fLaC":
+                        _audio_ext = ".flac"
+                    else:
+                        _audio_ext = ".mp3"  # final fallback
                 _audio_mime_map = {
                     ".mp3": "audio/mp3", ".m4a": "audio/m4a", ".ogg": "audio/ogg",
                     ".wav": "audio/wav", ".flac": "audio/flac", ".aac": "audio/aac",
@@ -4302,7 +4329,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 cached_path = cache_audio_from_bytes(bytes(audio_bytes), ext=_audio_ext)
                 event.media_urls = [cached_path]
                 event.media_types = [_audio_mime_map.get(_audio_ext, "audio/mp3")]
-                logger.info("[Telegram] Cached user audio at %s (ext=%s)", cached_path, _audio_ext)
+                logger.info("[Telegram] Cached user audio at %s (ext=%s, name=%s, mime=%s)", cached_path, _audio_ext, _audio_name, _audio_mime)
             except Exception as e:
                 logger.warning("[Telegram] Failed to cache audio: %s", e, exc_info=True)
 
@@ -4406,22 +4433,48 @@ class TelegramAdapter(BasePlatformAdapter):
                 # 2026-05-19 WVB fix: audio document fallback
                 # Telegram이 m4a/aac/flac/wav 등을 document로 분류할 수 있음
                 # ("파일" 카테고리에서 첨부 시). msg.audio 처리와 동일 라우팅.
-                # transcription_tools.py SUPPORTED_FORMATS 와 정렬.
+                # Resolution priority: ext → mime → magic bytes (msg.audio 동일 방식)
                 _wvb_audio_doc_types = {
                     ".mp3": "audio/mp3", ".m4a": "audio/m4a", ".ogg": "audio/ogg",
                     ".wav": "audio/wav", ".flac": "audio/flac", ".aac": "audio/aac",
                     ".webm": "audio/webm", ".mp4": "audio/mp4",
                     ".mpeg": "audio/mpeg", ".mpga": "audio/mpeg",
                 }
+                _wvb_mime_to_ext = {
+                    "audio/m4a": ".m4a", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
+                    "audio/aac": ".aac", "audio/x-aac": ".aac",
+                    "audio/ogg": ".ogg", "audio/x-ogg": ".ogg", "audio/oga": ".ogg",
+                    "audio/wav": ".wav", "audio/x-wav": ".wav",
+                    "audio/flac": ".flac", "audio/x-flac": ".flac",
+                    "audio/webm": ".webm",
+                    "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mpga": ".mp3",
+                }
                 if ext in _wvb_audio_doc_types or (doc_mime and doc_mime.startswith("audio/")):
                     file_obj = await doc.get_file()
                     audio_bytes = await file_obj.download_as_bytearray()
-                    _resolved_ext = ext if ext in _wvb_audio_doc_types else ".mp3"
+                    # Priority: ext → mime → magic bytes
+                    _resolved_ext = ext if ext in _wvb_audio_doc_types else None
+                    if not _resolved_ext and doc_mime:
+                        _resolved_ext = _wvb_mime_to_ext.get(doc_mime)
+                    if not _resolved_ext:
+                        _hdr = bytes(audio_bytes[:12]) if audio_bytes else b""
+                        if _hdr[4:8] == b"ftyp":
+                            _resolved_ext = ".m4a"
+                        elif _hdr[:3] == b"ID3" or _hdr[:2] == b"\xff\xfb" or _hdr[:2] == b"\xff\xf3":
+                            _resolved_ext = ".mp3"
+                        elif _hdr[:4] == b"OggS":
+                            _resolved_ext = ".ogg"
+                        elif _hdr[:4] == b"RIFF":
+                            _resolved_ext = ".wav"
+                        elif _hdr[:4] == b"fLaC":
+                            _resolved_ext = ".flac"
+                        else:
+                            _resolved_ext = ".m4a"  # most common modern audio default
                     cached_path = cache_audio_from_bytes(bytes(audio_bytes), ext=_resolved_ext)
                     event.media_urls = [cached_path]
                     event.media_types = [_wvb_audio_doc_types.get(_resolved_ext, doc_mime or "audio/mp3")]
                     event.message_type = MessageType.AUDIO
-                    logger.info("[Telegram] Cached user audio-document at %s (ext=%s)", cached_path, _resolved_ext)
+                    logger.info("[Telegram] Cached user audio-document at %s (ext=%s, orig_name=%s, mime=%s)", cached_path, _resolved_ext, original_filename, doc_mime)
                     await self.handle_message(event)
                     return
 
