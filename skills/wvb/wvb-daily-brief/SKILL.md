@@ -1,11 +1,11 @@
 ---
 name: wvb-daily-brief
-description: 원대로 대표 매일 KST 06:00 일일 브리핑 — 오늘 일정·미수신 메시지·권장 초점. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
-version: 2.1.1
+description: 원대로 대표 매일 KST 07:00 일일 브리핑 — 오늘 일정·미수신 메시지·권장 초점. Cron 자동 발사 + 사용자 수동 호출 (/brief 또는 "일일 브리핑").
+version: 2.2.0
 metadata:
   tags: [wvb, daily, brief, executive, cron]
   domain: wvb
-  cron: "0 5 * * *"
+  cron: "0 6 * * *"
   timezone: "Asia/Singapore"
   trigger_keywords:
     - 일일 브리핑
@@ -15,11 +15,11 @@ metadata:
     - /brief
 ---
 
-# WVB Daily Brief (KST 06:00)
+# WVB Daily Brief (KST 07:00)
 
 ## When to Use
 
-- **자동 트리거**: 매일 KST 06:00 cron (컨테이너 TZ=Asia/Singapore → SGT 05:00, schedule `0 5 * * *`). 2026-05-17 정정: 이전 `0 21 * * *`는 작성자가 UTC 해석을 가정했으나 Hermes는 컨테이너 TZ로 cron parse — SGT 21:00 = KST 22:00 잘못 fire.
+- **자동 트리거**: 매일 KST 07:00 cron (컨테이너 TZ=Asia/Singapore → SGT 06:00, schedule `0 6 * * *`). 2026-05-18 사용자 결정: 원래 KST 06:00 의도 → KST 07:00으로 변경. 변경 이력: (1) `0 21 * * *` UTC 가정 오작성(5/17 RCA), (2) `0 5 * * *` SGT KST 06:00 정정(5/17), (3) `0 6 * * *` KST 07:00 사용자 변경(5/18).
 - **수동 트리거**: 사용자가 `/brief` 또는 "일일 브리핑" / "오늘 일정 정리" 자연어 호출
 
 ## Required Skills (cron 생성 시 함께 preload 필수)
