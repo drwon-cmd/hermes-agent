@@ -55,7 +55,12 @@ RUN npm install -g @softeria/ms-365-mcp-server@0.108.0 \
 # Plan: docs/plans/2026-05-18-meeting-memo-from-voice.md §5
 # Pypi fetch 검증 (2026-05-18): reportlab 4.5.1 (2026-05-12 release), pypdf 6.11.0 (2026-05-09)
 # uv venv path = /opt/hermes/.venv (Dockerfile L73 .bash_profile auto-activate)
-RUN /opt/hermes/.venv/bin/pip install --no-cache-dir \
+#
+# 2026-05-19 fix (build 실패 RCA — feedback_uv_venv_pip_mismatch 재발):
+#   - 첫 시도 `/opt/hermes/.venv/bin/pip` → exit 127 (pip not found)
+#   - 근본: uv venv는 pip binary 미생성. `uv pip` 사용 필수
+#   - 메모리에 박제된 fix template 그대로 적용
+RUN uv pip install --python /opt/hermes/.venv/bin/python --no-cache-dir \
     reportlab==4.5.1 \
     pypdf==6.11.0
 
