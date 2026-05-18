@@ -45,6 +45,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g @softeria/ms-365-mcp-server@0.108.0 \
     && npm cache clean --force
 
+# -----------------------------------------------------------------------------
+# 2026-05-18: hermes user .bash_profile + .profile 에 venv auto-activate 추가
+# -----------------------------------------------------------------------------
+# 근거: tools/environments/base.py init_session() 이 bash -l -c '...' 로 snapshot
+#   캡처 → hermes user 의 login shell rc 파일이 venv 를 source 하지 않으면
+#   snapshot PATH 에 venv (/opt/hermes/.venv/bin) 없음 → 이후 모든 'python ...'
+#   호출이 "command not found" 로 실패.
+#
+# 사고 이력: 2026-05-18 wvb-daily-brief cron 실패 (bare python not found).
+#   v2.1.1 SKILL 절대경로 fix 는 ad-hoc — SKILL 작성자가 매번 venv 절대경로를
+#   써야 누락 위험. 본 fix 는 root cause (login shell PATH) 직접 해결.
+#
+# 위치 선택:
+#   - .bash_profile: login shell 이 자동 source (bash -l). interactivity guard 없음.
+#   - .profile: .bash_profile 없을 때 fallback. 일부 distro 가 사용.
+#   - .bashrc 는 의도적으로 제외 — Debian default 첫 줄 interactivity guard
+#     (case $- in *i*) ;; *) return;; esac) 가 non-interactive 호출에서
+#     early return 시켜 우리 append 라인 미실행.
+#
+# Idempotent: grep guard 로 marker 중복 방지. 이미지 rebuild 시 중복 append 차단.
+RUN HOME_HERMES="$(getent passwd hermes | cut -d: -f6)" \
+    && [ -n "${HOME_HERMES}" ] || (echo "FATAL: hermes user not found in /etc/passwd" && exit 1) \
+    && mkdir -p "${HOME_HERMES}" \
+    && for rcfile in "${HOME_HERMES}/.bash_profile" "${HOME_HERMES}/.profile"; do \
+         touch "$rcfile"; \
+         if ! grep -q "wvb-venv-activate" "$rcfile" 2>/dev/null; then \
+           printf '\n# wvb-venv-activate (Dockerfile-injected, 2026-05-18 cron RCA)\n[ -f /opt/hermes/.venv/bin/activate ] && . /opt/hermes/.venv/bin/activate\n' >> "$rcfile"; \
+         fi; \
+         chown hermes:hermes "$rcfile"; \
+       done \
+    && echo "hermes user dotfiles patched: HOME=${HOME_HERMES}"
+
 ENV LANG=ko_KR.UTF-8 \
     LC_ALL=ko_KR.UTF-8 \
     LANGUAGE=ko_KR:ko \
