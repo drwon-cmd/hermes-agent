@@ -1,7 +1,7 @@
 ---
 name: wvb-wiki-lookup
-description: WVB 위키(인물·회사·프로젝트·의사결정·개념) 검색. 김실장·원대로 대표·POPUP·Zero100·해녀 등 비즈니스 컨텍스트 질문 시 자동 호출. **반드시 wiki/{category}/ 하위 폴더(people/companies/projects/decisions/concepts)를 grep해 페이지를 읽어 인용해야 함. root CLAUDE.md만 인용한 응답은 procedure 위반으로 실패**.
-version: 1.1.0
+description: WVB 위키(인물·회사·프로젝트·의사결정·개념) 검색. 김실장·원대로 대표·POPUP·Zero100·해녀 등 비즈니스 컨텍스트 질문 시 자동 호출. **반드시 wiki/{category}/ 하위 폴더(people/companies/projects/decisions/concepts)를 grep해 페이지를 읽어 인용해야 함. root CLAUDE.md만 인용한 응답은 procedure 위반으로 실패**. **한국어 키워드는 wiki/_meta/aliases.json으로 영문 slug 변환 후 grep**.
+version: 1.2.0
 metadata:
   tags: [wvb, wiki, search, context, knowledge]
   domain: wvb
@@ -59,12 +59,18 @@ metadata:
 
 ## Procedure (반드시 순차 진행 — 단계 skip 금지)
 
+0. **한국어 → 영문 slug 변환 (한국어 키워드 포함 시 필수)** — `/opt/data/wiki/wiki/_meta/aliases.json` Read 후 사용자 질문의 한국어 키워드를 영문 slug로 변환:
+   - 예: 사용자 질문 "해녀의부엌 상태?" → aliases.companies["해녀의부엌"] = ["haenyeo-kitchen-group", "haenyeo-chatbot"] → 두 slug로 grep
+   - 예: 사용자 질문 "원대로 대표?" → aliases.people["원대로"] = ["won-daero", "drwon"] → 두 slug로 grep
+   - aliases.json read 실패 또는 매칭 없으면 **§2에서 한국어 키워드 직접 grep + 영문 가능 추정 변환 시도** (해녀→haenyeo, 원대로→won-daero 등 일반 패턴)
+   - 변환된 영문 slug + 원본 한국어 키워드 **둘 다** §2 grep 키워드로 사용
+
 1. **인덱스 우선 조회** — 다음 경로 순서로 read 시도 (첫 성공한 것 사용):
    - (a) `/opt/data/wiki/wiki/_meta/index-full.md`
    - (b) `/opt/data/wiki/wiki/_index.md` (a 없으면 fallback)
    - 둘 다 read 실패 또는 빈 결과여도 **절대 응답 종료 금지** — 반드시 §2로 진행
 
-2. **카테고리 폴더 grep (필수 — §1 결과 무관하게 항상 진행)** — 질문의 키워드로 다음 폴더 grep:
+2. **카테고리 폴더 grep (필수 — §1 결과 무관하게 항상 진행)** — §0에서 변환된 영문 slug + 원본 한국어 키워드 둘 다로 다음 폴더 grep:
    - 인물 관련 (원대로·김실장·이세연·드왕·대표·CEO 등) → `/opt/data/wiki/wiki/people/`
    - 회사·자회사 (POPUP·Zero100·해녀·WVB·Translink 등) → `/opt/data/wiki/wiki/companies/`
    - 프로젝트 (drwon-advisory·warm-connect·hermes·WMPA·KMS 등) → `/opt/data/wiki/wiki/projects/`
@@ -105,4 +111,5 @@ metadata:
 - WVB Wiki SCHEMA: `/opt/data/wiki/wiki/SCHEMA.md`
 - Wiki 인덱스 (전체): `/opt/data/wiki/wiki/_meta/index-full.md`
 - Wiki 카테고리 인덱스 (concepts): `/opt/data/wiki/wiki/_meta/index-concepts.md`
+- **한국어↔영문 alias 매핑: `/opt/data/wiki/wiki/_meta/aliases.json`** (Procedure §0 사용)
 - Personal Data Protection 룰: 외부 노출 금지 (SOUL.md·USER.md·_personal/*)
