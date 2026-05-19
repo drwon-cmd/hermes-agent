@@ -17,6 +17,18 @@ log() {
     echo "${LOG_PREFIX} $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"
 }
 
+# 2026-05-19 fix: boot diagnostic envvar leak 차단 (RCA: Railway logs에 secret 5종 평문 노출).
+# 원인: bash 패턴 `${VAR:+set}${VAR:-MISSING}` 의 두 번째 expansion이 VAR set 시 실제 값 출력.
+# 수정: helper 함수로 set/unset 여부만 반환 (값은 절대 echo 하지 않음).
+envstatus_req() {
+    local val="${1:-}"
+    if [ -n "$val" ]; then echo "set (${#val} chars)"; else echo "MISSING"; fi
+}
+envstatus_opt() {
+    local val="${1:-}"
+    if [ -n "$val" ]; then echo "set (${#val} chars)"; else echo "unset"; fi
+}
+
 # 2026-05-16 18:40 fix: fabulous-patience 환경 runtime 사망 진단용 robust logging.
 # set -e trigger 정확한 line을 잡기 위해 ERR trap + 시작 직후 env/state dump 추가.
 on_err() {
@@ -35,8 +47,8 @@ log "=== Boot diagnostic ==="
 log "User: $(id -u 2>&1):$(id -g 2>&1) ($(whoami 2>&1 || echo '?'))"
 log "Working dir: $(pwd)"
 log "Volume /opt/data: $(ls -la /opt/data 2>/dev/null | head -3 | tr '\n' '|' || echo 'MISSING')"
-log "Required envvars set: GOOGLE_API_KEY=${GOOGLE_API_KEY:+set}${GOOGLE_API_KEY:-MISSING}, TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:+set}${TELEGRAM_BOT_TOKEN:-MISSING}, TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:+set}${TELEGRAM_ALLOWED_USERS:-MISSING}, TELEGRAM_ADMIN_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID:+set}${TELEGRAM_ADMIN_CHAT_ID:-MISSING}"
-log "Optional envvars: GOOGLE_CLIENT_SECRET_B64=${GOOGLE_CLIENT_SECRET_B64:+set (${#GOOGLE_CLIENT_SECRET_B64} chars)}${GOOGLE_CLIENT_SECRET_B64:-unset}, OPENAI_API_KEY=${OPENAI_API_KEY:+set}${OPENAI_API_KEY:-unset}, WIKI_REPO_URL=${WIKI_REPO_URL:+set}${WIKI_REPO_URL:-unset}"
+log "Required envvars: GOOGLE_API_KEY=$(envstatus_req "${GOOGLE_API_KEY:-}"), TELEGRAM_BOT_TOKEN=$(envstatus_req "${TELEGRAM_BOT_TOKEN:-}"), TELEGRAM_ALLOWED_USERS=$(envstatus_req "${TELEGRAM_ALLOWED_USERS:-}"), TELEGRAM_ADMIN_CHAT_ID=$(envstatus_req "${TELEGRAM_ADMIN_CHAT_ID:-}")"
+log "Optional envvars: GOOGLE_CLIENT_SECRET_B64=$(envstatus_opt "${GOOGLE_CLIENT_SECRET_B64:-}"), OPENAI_API_KEY=$(envstatus_opt "${OPENAI_API_KEY:-}"), WIKI_REPO_URL=$(envstatus_opt "${WIKI_REPO_URL:-}")"
 log "=== End boot diagnostic ==="
 
 # -----------------------------------------------------------------------------
