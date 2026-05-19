@@ -119,6 +119,16 @@ timezone: "Asia/Singapore"
 # -----------------------------------------------------------------------------
 display:
   language: "ko"
+  # 2026-05-19 사용자 요청: telegram 응답을 한 번에 종합 (도구 호출 progress 메시지 끄기).
+  # _PLATFORM_DEFAULTS[telegram] = tool_progress: "new" → "off"로 override.
+  # 효과: 📖 read_file / ✍️ write_file / ⏰ cronjob 같은 progress 알림 미발송, 최종 응답 1개만 발송.
+  # 검증 출처: gateway/display_config.py §_PLATFORM_DEFAULTS["telegram"] + resolution order.
+  # cron 발사 결과(script-only)는 별도 메커니즘이라 본 옵션과 무관 (그대로 발송).
+  platforms:
+    telegram:
+      tool_progress: "off"
+      show_reasoning: false
+      cleanup_progress: false
 
 # -----------------------------------------------------------------------------
 # Skills external directories — WVB 도메인 skill 발견
